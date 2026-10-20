@@ -55,18 +55,17 @@ Four steps: create the repository and a token, connect the vault, turn on automa
 1. Create a project in GitLab — either on [gitlab.com](https://gitlab.com) or on a self-managed
    instance (any HTTPS base URL works). A brand-new **empty** project is fine: the plugin can create
    the first commit from your vault. An existing project with content is fine too.
-2. Create an access token for the plugin:
+2. Create a fine-grained access token for the plugin, either a personal one (in your user
+   settings, under access tokens) or one for the project (**Project → Settings → Access tokens**):
 
-   **Project → Settings → Access tokens → Add new token**
+   - **Access:** only the vault project.
+   - **Permissions:** **Branch: Read**, **Repository: Read**, **Commit: Create**.
 
-   - **Group and project access:** *Only specific groups or projects that I'm a member of*, then
-     select the vault project.
-   - **Project:** Read
-   - **Repository:** Commit Read, Commit Create, Branch Read, Code Read, Repository Read,
-     Repository Tag Read
-
-   Fine-grained permissions do not cascade — grant each one explicitly. If the target branch is
-   protected, add Protected Branch Read.
+   That's all Envoy calls: branches (Branch: Read); compare, the file tree, raw files and blobs,
+   and the archive (Repository: Read); and creating commits (Commit: Create). See GitLab's
+   [fine-grained permissions for the REST API](https://docs.gitlab.com/auth/tokens/fine_grained_access_tokens_rest/).
+   Pushing to a protected branch such as `main` depends on your role in the project, not on the
+   token, so no protected-branch permission is needed.
 
 3. If your GitLab instance does not support fine-grained access tokens, use a project access token
    with role `Maintainer` and scope `api`. The plugin uses GitLab's REST API to create commits;
