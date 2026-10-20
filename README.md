@@ -288,7 +288,9 @@ of removing the file.
 
 ### Device-specific settings
 
-Envoy syncs the whole config folder (`.obsidian`), so all devices share one setup. When a device
+Envoy syncs the whole config folder (`.obsidian`), so all devices share one setup. Obsidian reports
+no file changes there (nor for dot-files like `.gitignore`), so every sync checks those files itself,
+reading only the ones whose modification time or size changed. When a device
 should differ, say a phone with its own theme or fewer plugins, list the settings files it keeps for
 itself under **This device → Device-specific settings**, one per line, relative to the config folder:
 

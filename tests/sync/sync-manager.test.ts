@@ -552,6 +552,13 @@ function fakeVault(files: Record<string, string>) {
         return { files: childFiles.sort(), folders: [...childFolders].sort() };
       },
       readBinary: async (path: string) => new TextEncoder().encode(files[path]).buffer,
+      exists: async (path: string) =>
+        Object.prototype.hasOwnProperty.call(files, path) ||
+        Object.keys(files).some((file) => file.startsWith(`${path}/`)),
+      stat: async (path: string) =>
+        Object.prototype.hasOwnProperty.call(files, path)
+          ? { type: "file", ctime: 0, mtime: 0, size: files[path].length }
+          : null,
     },
   } as any;
 }

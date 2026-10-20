@@ -389,6 +389,8 @@ export class SyncManager {
 
       if (trigger === "audit") {
         await this.auditLocalChanges();
+      } else {
+        await this.auditHiddenFiles();
       }
 
       this.setProgress(progress, "Finding remote changes…");
@@ -873,7 +875,10 @@ export class SyncManager {
   }
 
   private deviceSpecificFor(settings: GitLabSyncSettings): DeviceSpecificPaths {
-    return new DeviceSpecificPaths(this.options.vault?.configDir ?? ".obsidian", settings.deviceSpecificPaths ?? []);
+    // Without a vault there is nothing local to keep.
+    return this.options.vault
+      ? new DeviceSpecificPaths(this.options.vault.configDir, settings.deviceSpecificPaths ?? [])
+      : new DeviceSpecificPaths("", []);
   }
 
   private async currentDeviceSpecific(): Promise<DeviceSpecificPaths> {
@@ -1079,6 +1084,69 @@ export class SyncManager {
     }
   }
 
+  /**
+   * Obsidian sends no file events for its config folder or other dot-files
+   * (such as .gitignore), so every sync looks at them directly. A file is read
+   * again only when its modification time or size changed since it last
+   * matched the synced version.
+   */
+  private async auditHiddenFiles(): Promise<void> {
+    const vault = this.options.vault;
+    if (!vault) {
+      return;
+    }
+    const data = await this.options.stateStore.load();
+    const ignoreMatcher = this.createIgnoreMatcher(this.deviceSpecificFor(this.options.settings ?? data.settings));
+    await ignoreMatcher.reload();
+    const configDir = normalizePath(vault.configDir);
+    const isHidden = (path: string) => path.startsWith(".") || path === configDir || path.startsWith(`${configDir}/`);
+
+    const root = await vault.adapter.list("");
+    const local = root.files.map((path) => normalizePath(path)).filter((path) => isHidden(path) && !this.isHardExcluded(path));
+    const folders = unique([configDir, ...root.folders.map((path) => normalizePath(path)).filter(isHidden)]);
+    for (const folder of folders) {
+      if (this.isHardExcluded(folder) || ignoreMatcher.isDirIgnored?.(folder) || !(await vault.adapter.exists(folder))) {
+        continue;
+      }
+      local.push(...(await this.listLocalFiles(folder, ignoreMatcher)));
+    }
+
+    const tracked = data.state.trackedFiles;
+    const seenBefore = data.state.hiddenFiles ?? {};
+    const seen: Record<string, HiddenFileStat> = {};
+    const journal = this.getJournal();
+    for (const path of local) {
+      if (ignoreMatcher.isIgnored(path, tracked)) {
+        continue;
+      }
+      const stat = await vault.adapter.stat(path);
+      const before = seenBefore[path];
+      if (stat && before && before.mtime === stat.mtime && before.size === stat.size) {
+        seen[path] = before;
+        continue;
+      }
+      const bytes = new Uint8Array(await vault.adapter.readBinary(path));
+      if (tracked[path] && (await calculateGitBlobId(bytes)) === tracked[path].blobId) {
+        if (stat) {
+          seen[path] = { mtime: stat.mtime, size: stat.size };
+        }
+        continue;
+      }
+      await journal.recordUpsert?.(path);
+    }
+
+    const localSet = new Set(local);
+    for (const path of Object.keys(tracked)) {
+      if (isHidden(path) && !localSet.has(path) && !(await vault.adapter.exists(path))) {
+        await journal.recordDelete?.(path);
+      }
+    }
+
+    await this.options.stateStore.update((next) => {
+      next.state.hiddenFiles = seen;
+    });
+  }
+
   private async listLocalFiles(dir: string, ignoreMatcher?: IgnoreMatcherLike): Promise<string[]> {
     if (!this.options.vault) {
       return [];
@@ -1140,6 +1208,11 @@ export class SyncManager {
 }
 
 /** What applyHolds() decided for one sync. */
+interface HiddenFileStat {
+  mtime: number;
+  size: number;
+}
+
 interface Holds {
   guard: UploadGuardLike;
   reasons: Map<string, HoldReason>;

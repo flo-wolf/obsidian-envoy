@@ -97,6 +97,11 @@ export interface LocalSyncState {
    * off the list can be handed back to sync.
    */
   deviceSpecificPaths?: string[];
+  /**
+   * Modification time and size of config-folder files and dot-files when they
+   * last matched the synced version, so a sync only re-reads the ones that changed.
+   */
+  hiddenFiles?: Record<string, { mtime: number; size: number }>;
 }
 
 export interface PluginData {

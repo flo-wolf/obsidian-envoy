@@ -268,6 +268,67 @@ describe("GitLab sync integration", () => {
   }, 20_000);
 });
 
+describe("Settings and dot-files, which Obsidian sends no file events for", () => {
+  beforeEach(() => {
+    requestUrlMock.mockReset();
+  });
+
+  it("uploads a changed settings file on a normal sync", async () => {
+    const setup = await initializedFixture({ ".obsidian/community-plugins.json": "[]" });
+    // Written without a journal entry, as Obsidian does for its config folder.
+    await setup.vault.write(".obsidian/community-plugins.json", "[\"dataview\"]");
+
+    const result = await setup.manager().sync("manual");
+
+    expect(result).toMatchObject({ status: "success", pushed: 1 });
+    expect(setup.server.fileText(".obsidian/community-plugins.json")).toBe("[\"dataview\"]");
+  });
+
+  it("uploads new plugin files and a root dot-file, and a deletion", async () => {
+    const setup = await initializedFixture({
+      ".gitignore": ".obsidian/workspace.json\n",
+      ".obsidian/hotkeys.json": "{}",
+    });
+    await setup.vault.write(".obsidian/plugins/dataview/main.js", "code");
+    await setup.vault.write(".gitignore", ".obsidian/workspace.json\n.trash/\n");
+    await setup.vault.write(".obsidian/workspace.json", "{\"layout\":1}");
+    await setup.vault.remove(".obsidian/hotkeys.json");
+
+    await setup.manager().sync("manual");
+
+    expect(setup.server.fileText(".obsidian/plugins/dataview/main.js")).toBe("code");
+    expect(setup.server.fileText(".gitignore")).toBe(".obsidian/workspace.json\n.trash/\n");
+    expect(setup.server.fileText(".obsidian/hotkeys.json")).toBeNull();
+    expect(setup.server.fileText(".obsidian/workspace.json")).toBeNull();
+    expect(setup.server.fileText(".obsidian/plugins/envoy/main.js")).toBeNull();
+  });
+
+  it("doesn't read unchanged settings files again", async () => {
+    const setup = await initializedFixture({
+      ".obsidian/app.json": "{}",
+      ".obsidian/appearance.json": "{}",
+    });
+    await setup.manager().sync("manual");
+    setup.vault.resetCounters();
+
+    const result = await setup.manager().sync("manual");
+
+    expect(result).toMatchObject({ status: "success", pulled: 0, pushed: 0 });
+    expect(setup.vault.readBinaryPaths).toEqual([]);
+  });
+
+  it("doesn't upload a settings file the sync itself just downloaded", async () => {
+    const setup = await initializedFixture({ ".obsidian/app.json": "{}" });
+    await setup.server.desktopCommit({ ".obsidian/app.json": "{\"desktop\":true}" });
+    await setup.manager().sync("manual");
+
+    const result = await setup.manager().sync("manual");
+
+    expect(result).toMatchObject({ pulled: 0, pushed: 0 });
+    expect(setup.server.commitActions).toEqual([]);
+  });
+});
+
 describe("Device-specific settings", () => {
   beforeEach(() => {
     requestUrlMock.mockReset();
@@ -634,10 +695,14 @@ class MemoryVault {
       remove: async (path: string) => this.remove(path),
       rmdir: async (path: string, recursive: boolean) => this.rmdir(path, recursive),
       rename: async (path: string, newPath: string) => this.rename(path, newPath),
+      stat: async (path: string) => this.stat(path),
     },
   };
 
   private files = new Map<string, Uint8Array>();
+  // Like a file system's mtime: each write gets a later one.
+  private mtimes = new Map<string, number>();
+  private clock = 0;
   private folders = new Set<string>(["", ".obsidian", ".obsidian/plugins", ".obsidian/plugins/envoy"]);
 
   constructor(files: Record<string, Uint8Array> = {}) {
@@ -664,7 +729,17 @@ class MemoryVault {
   async write(path: string, content: string | Uint8Array): Promise<void> {
     const data = typeof content === "string" ? bytes(content) : content;
     this.files.set(path, new Uint8Array(data));
+    this.mtimes.set(path, ++this.clock);
     this.addParentFolders(path);
+  }
+
+  private async stat(path: string): Promise<{ type: "file"; ctime: number; mtime: number; size: number } | null> {
+    const content = this.files.get(path);
+    if (!content) {
+      return null;
+    }
+    const mtime = this.mtimes.get(path) ?? 0;
+    return { type: "file", ctime: mtime, mtime, size: content.byteLength };
   }
 
   async remove(path: string): Promise<void> {
@@ -685,6 +760,7 @@ class MemoryVault {
     }
     this.files.set(newPath, content);
     this.files.delete(path);
+    this.mtimes.set(newPath, ++this.clock);
     this.addParentFolders(newPath);
   }
 

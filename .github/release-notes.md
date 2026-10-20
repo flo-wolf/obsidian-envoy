@@ -1,3 +1,1 @@
-- **Device-specific settings** (Settings → This device): list settings files a device keeps for itself, e.g. `appearance.json` for its own theme or `community-plugins.json` for its own set of plugins. Envoy never uploads them from that device and never changes them there; the other devices keep sharing theirs. Taking a file off the list shares it again, with the repository's version.
-- The "Sync complete" notice now shows, in a smaller second line, how many files were pulled (↓) and pushed (↑), or "No changes".
-- "Reset local sync state" explains what it does and what happens when you connect again.
+Changes in the config folder (settings, enabled plugins, themes, snippets) and dot-files like `.gitignore` are now synced by every sync. Obsidian reports no file changes there, so before, only "Full audit and sync" picked them up. Envoy checks these files itself and only reads the ones whose modification time or size changed.
