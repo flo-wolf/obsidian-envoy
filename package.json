@@ -47,5 +47,5 @@
     "@zip.js/zip.js": "^2.7.60",
     "ignore": "^7.0.6"
   },
-  "packageManager": "pnpm@9.15.9"
+  "packageManager": "pnpm@10.14.0"
 }
