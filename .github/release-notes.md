@@ -1,1 +1,1 @@
-The token permissions shown in the settings now include Project: Read, which connecting needs: Project: Read, Branch: Read, Repository: Read and Commit: Create.
+The token permissions in the settings are grouped as in GitLab's token form: Projects: Project → Read; Repository: Branch → Read, Repository → Read, Commit → Create.
