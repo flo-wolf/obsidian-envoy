@@ -80,3 +80,28 @@
 .envoy-token-setting .setting-item-description {
 	white-space: pre-line;
 }
+
+/* Notices: the smaller second line, e.g. files pulled and pushed. */
+.envoy-notice-detail {
+	margin-top: var(--size-2-1);
+	font-size: var(--font-ui-smaller);
+	color: var(--text-muted);
+	white-space: pre-line;
+}
+
+/* Settings: device-specific settings, a full-width list under its description. */
+.envoy-device-specific-setting {
+	flex-wrap: wrap;
+	gap: var(--size-4-2);
+}
+.envoy-device-specific-setting .setting-item-description {
+	white-space: pre-line;
+}
+.envoy-device-specific-setting .setting-item-control {
+	flex-basis: 100%;
+}
+.envoy-device-specific-setting textarea {
+	width: 100%;
+	min-height: 6em;
+	font-family: var(--font-monospace);
+}

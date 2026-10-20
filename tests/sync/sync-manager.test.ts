@@ -27,6 +27,7 @@ const settings: GitLabSyncSettings = {
   loggingEnabled: false,
   conflictStrategy: "remote",
   lockBeforeManualSync: false,
+  deviceSpecificPaths: [],
 };
 
 describe("SyncManager", () => {

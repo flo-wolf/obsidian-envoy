@@ -8,6 +8,7 @@ import { SyncStatusModal } from "./views/sync-status-modal";
 import { BootstrapService, type ConnectPreview } from "./sync/bootstrap-service";
 import { GitLabClient } from "./gitlab/client";
 import { GitLabNotFoundError } from "./gitlab/errors";
+import { DeviceSpecificPaths } from "./sync/device-specific";
 import { ConflictService } from "./conflicts/conflict-service";
 import { enclaveApi } from "./enclave/enclave-api";
 import { ConflictListModal, ConflictModal } from "./views/conflict-modal";
@@ -62,7 +63,7 @@ export default class GitLabGitlessSyncPlugin extends Plugin {
       settings: this.settings,
       logger: this.logger,
       createProgressNotice: (message) => new Notice(message, 0),
-      notice: (message) => new Notice(message, 5000),
+      notice: (message, detail) => new Notice(detail ? withDetail(message, detail) : message, 5000),
       lockBeforeSync: (trigger) => trigger === "manual" && this.settings.lockBeforeManualSync,
     });
     this.conflicts = new ConflictService({
@@ -213,6 +214,7 @@ export default class GitLabGitlessSyncPlugin extends Plugin {
       vault: this.app.vault,
       client,
       journal: { suppress: async (operation) => operation() },
+      deviceSpecific: new DeviceSpecificPaths(this.app.vault.configDir, this.settings.deviceSpecificPaths),
     });
     return { client, service };
   }
@@ -607,4 +609,12 @@ export default class GitLabGitlessSyncPlugin extends Plugin {
       attempts: result.attempts ?? null,
     });
   }
+}
+
+/** A notice with a second, smaller line, e.g. what a sync changed. */
+function withDetail(message: string, detail: string): DocumentFragment {
+  return createFragment((fragment) => {
+    fragment.createDiv({ text: message });
+    fragment.createDiv({ cls: "envoy-notice-detail", text: detail });
+  });
 }

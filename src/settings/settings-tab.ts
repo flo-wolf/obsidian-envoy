@@ -4,6 +4,7 @@ import type { LocalSyncState } from "../settings/settings";
 import { copyToClipboard } from "../utils";
 import { enclavePresence } from "../enclave/enclave-api";
 import { ConnectConfirmModal } from "../views/connect-confirm-modal";
+import { parseDeviceSpecificEntries } from "../sync/device-specific";
 
 export interface VaultSetupViewState {
   initialized: boolean;
@@ -206,7 +207,10 @@ export default class GitLabSyncSettingsTab extends PluginSettingTab {
     if (setupState.showResetAction) {
       new Setting(containerEl)
         .setName("Reset local sync state")
-        .setDesc("Forget the local base commit, tracked index, dirty journal, and pending transaction")
+        .setDesc(
+          "Makes this device forget everything it remembers about past syncs, as if it had never been connected. " +
+            "Use it when sync is stuck or keeps failing. Your files and GitLab stay as they are; afterwards you connect again.",
+        )
         .addButton((button) => {
           button
             .setButtonText("Reset")
@@ -214,7 +218,11 @@ export default class GitLabSyncSettingsTab extends PluginSettingTab {
             .onClick(() => {
               const modal = new Modal(this.plugin.app);
               modal.setTitle("Reset local sync state?");
-              modal.setContent("This does not delete files or change GitLab.");
+              modal.setContent(
+                "No file is deleted and nothing changes on GitLab. Afterwards, connect again: files that match the " +
+                  "repository are kept, settings files take the repository's version, and any other file that differs " +
+                  "is kept in both versions. Conflicts waiting in the conflict window are forgotten, but their copies stay in the vault.",
+              );
               new Setting(modal.contentEl).addButton((btn) =>
                 btn
                   .setButtonText("Reset")
@@ -361,6 +369,35 @@ export default class GitLabSyncSettingsTab extends PluginSettingTab {
           }),
         );
     }
+
+    new Setting(containerEl).setName("This device").setHeading();
+
+    const configDir = this.app.vault.configDir;
+    new Setting(containerEl)
+      .setName("Device-specific settings")
+      .setDesc(
+        [
+          `Settings files this device keeps for itself, one per line, relative to the ${configDir} folder. ` +
+            "Envoy never uploads them from this device and never changes or deletes them here, so this device can " +
+            "use its own theme or plugins while your other devices keep sharing theirs.",
+          "For example:",
+          "• appearance.json: theme, light or dark mode, font size and enabled CSS snippets",
+          "• community-plugins.json: which community plugins are turned on",
+          "A folder ends with a slash, e.g. themes/. This list is stored on this device only.",
+          "Take a file off the list to share it again: on the next sync, the repository's version replaces this " +
+            "device's (restart Obsidian to load it). If the repository has none, this device's file is uploaded.",
+        ].join("\n"),
+      )
+      .setClass("envoy-device-specific-setting")
+      .addTextArea((text) =>
+        text
+          .setPlaceholder("appearance.json\ncommunity-plugins.json")
+          .setValue(this.plugin.settings.deviceSpecificPaths.join("\n"))
+          .onChange(async (value) => {
+            this.plugin.settings.deviceSpecificPaths = parseDeviceSpecificEntries(value);
+            await this.plugin.saveSettings();
+          }),
+      );
 
     new Setting(containerEl).setName("Interface").setHeading();
 

@@ -1,6 +1,7 @@
 import { normalizePath } from "obsidian";
 import { BlobReader, type Entry, Uint8ArrayWriter, ZipReader } from "@zip.js/zip.js";
 import { calculateGitBlobId } from "./conflict-resolver";
+import type { DeviceSpecificPaths } from "./device-specific";
 import { IgnoreMatcher } from "./ignore-matcher";
 import type { GitLabClient } from "../gitlab/client";
 import type { GitLabBranch, GitLabTreeItem } from "../gitlab/types";
@@ -57,6 +58,8 @@ export interface BootstrapServiceOptions {
   client: Pick<GitLabClient, "getBranch" | "getTree" | "getRawBlob" | "downloadArchive">;
   journal?: BootstrapJournal;
   pluginId?: string;
+  /** Settings files this device keeps: an existing local copy is left as it is. */
+  deviceSpecific?: DeviceSpecificPaths;
 }
 
 export class BootstrapService {
@@ -84,6 +87,9 @@ export class BootstrapService {
           await this.writeFile(operation.path, operation.data);
           settingsChanged ||= this.isSettingsPath(operation.path);
           continue;
+        }
+        if (this.options.deviceSpecific?.matches(operation.path)) {
+          continue; // this device keeps its own
         }
         const local = new Uint8Array(
           await this.options.vault.adapter.readBinary(operation.path),
@@ -131,7 +137,11 @@ export class BootstrapService {
     );
     // Same rules as the sync after connecting, which runs once the repository's
     // .gitignore files are downloaded, so the preview lists only what will be pushed.
-    const ignoreMatcher = new IgnoreMatcher(this.vaultAfterMerge(remoteIndex), this.pluginId);
+    const ignoreMatcher = new IgnoreMatcher(
+      this.vaultAfterMerge(remoteIndex),
+      this.pluginId,
+      this.options.deviceSpecific,
+    );
     await ignoreMatcher.reload();
     const localPaths = await this.listLocalFiles("", ignoreMatcher);
 

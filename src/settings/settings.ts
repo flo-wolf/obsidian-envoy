@@ -21,6 +21,7 @@ export const DEFAULT_SETTINGS: GitLabSyncSettings = {
   loggingEnabled: false,
   conflictStrategy: "auto-remote",
   lockBeforeManualSync: true,
+  deviceSpecificPaths: [],
 };
 
 export const DEFAULT_STATE: LocalSyncState = {

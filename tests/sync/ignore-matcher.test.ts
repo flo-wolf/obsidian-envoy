@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { DeviceSpecificPaths } from "../../src/sync/device-specific";
 import { IgnoreMatcher } from "../../src/sync/ignore-matcher";
 
 function fakeVault(files: Record<string, string>) {
@@ -125,5 +126,19 @@ describe("IgnoreMatcher", () => {
       matcher.isIgnored(".obsidian/plugins/envoy/main.js", {}),
     ).toBe(true);
     expect(matcher.isIgnored(".git/config", {})).toBe(true);
+  });
+
+  it("ignores device-specific settings even when they're tracked", async () => {
+    const deviceSpecific = new DeviceSpecificPaths(".obsidian", ["appearance.json", "themes/", "# a comment"]);
+    const matcher = new IgnoreMatcher(fakeVault({}), "envoy", deviceSpecific);
+    await matcher.reload();
+    const tracked = { ".obsidian/appearance.json": { blobId: "a", mode: "100644", size: 1 } };
+
+    expect(matcher.isIgnored(".obsidian/appearance.json", tracked)).toBe(true);
+    expect(matcher.isIgnored(".obsidian/themes/Minimal/theme.css", {})).toBe(true);
+    expect(matcher.isDirIgnored(".obsidian/themes")).toBe(true);
+    expect(matcher.isIgnored(".obsidian/app.json", {})).toBe(false);
+    expect(matcher.isIgnored("appearance.json", {})).toBe(false);
+    expect(matcher.isIgnored("notes/themes/a.md", {})).toBe(false);
   });
 });

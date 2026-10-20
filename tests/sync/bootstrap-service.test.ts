@@ -2,6 +2,7 @@ import { BlobWriter, TextReader, Uint8ArrayReader, ZipWriter } from "@zip.js/zip
 import { describe, expect, it, vi } from "vitest";
 import { BootstrapService } from "../../src/sync/bootstrap-service";
 import { calculateGitBlobId } from "../../src/sync/conflict-resolver";
+import { DeviceSpecificPaths } from "../../src/sync/device-specific";
 import type { GitLabBranch, GitLabTreeItem } from "../../src/gitlab/types";
 
 vi.mock("obsidian", () => ({
@@ -164,6 +165,7 @@ async function fixture(options: {
   archive?: ArrayBuffer;
   blobs?: Record<string, string>;
   journal?: ReturnType<typeof fakeJournal>;
+  deviceSpecific?: string[];
 }) {
   const vault = fakeVault(options.localFiles);
   const client = fakeClient(options);
@@ -172,6 +174,7 @@ async function fixture(options: {
     vault: vault.vault as any,
     client,
     journal: journal as any,
+    deviceSpecific: new DeviceSpecificPaths(".obsidian", options.deviceSpecific ?? []),
   });
 
   return { ...vault, client, journal, service };
@@ -329,9 +332,46 @@ describe("BootstrapService", () => {
       expect(preview.conflictCount).toBe(0);
       expect(preview.replacedSettingsPaths).toEqual([".obsidian/app.json"]);
     });
+
+    it("leaves device-specific settings out of the preview", async () => {
+      const setup = await fixture({
+        localFiles: {
+          ".obsidian/appearance.json": bytes("phone"),
+          ".obsidian/hotkeys.json": bytes("phone only"),
+        },
+        tree: [{ id: "a", name: "appearance.json", type: "blob", path: ".obsidian/appearance.json", mode: "100644" }],
+        deviceSpecific: ["appearance.json", "hotkeys.json"],
+      });
+      const preview = await setup.service.preview();
+      if (preview.mode !== "merge") throw new Error("expected merge preview");
+      expect(preview.localPushPaths).toEqual([]);
+      expect(preview.replacedSettingsPaths).toEqual([]);
+      expect(preview.conflictCount).toBe(0);
+    });
   });
 
   describe("BootstrapService.merge", () => {
+    it("keeps this device's copy of a device-specific settings file", async () => {
+      const archive = await zip([
+        { path: "root/.obsidian/appearance.json", content: "repo" },
+        { path: "root/.obsidian/hotkeys.json", content: "repo hotkeys" },
+      ]);
+      const setup = await fixture({
+        localFiles: { ".obsidian/appearance.json": bytes("phone") },
+        tree: [
+          { id: "a", name: "appearance.json", type: "blob", path: ".obsidian/appearance.json", mode: "100644" },
+          { id: "h", name: "hotkeys.json", type: "blob", path: ".obsidian/hotkeys.json", mode: "100644" },
+        ],
+        archive,
+        deviceSpecific: ["appearance.json", "hotkeys.json"],
+      });
+      const result = await setup.service.merge();
+      expect(setup.read(".obsidian/appearance.json")).toEqual(bytes("phone"));
+      // No copy here yet: the device starts from the repository's.
+      expect(setup.read(".obsidian/hotkeys.json")).toEqual(bytes("repo hotkeys"));
+      expect(result.conflictCopyPaths).toEqual([]);
+    });
+
     it("replaces a differing settings file with the repository's version, without a copy", async () => {
       const archive = await zip([{ path: "root/.obsidian/app.json", content: "{\"remote\":true}" }]);
       const setup = await fixture({

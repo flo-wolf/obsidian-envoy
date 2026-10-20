@@ -43,7 +43,7 @@ describe("settings setup view state", () => {
 
 function fakePlugin() {
   return {
-    app: { key: "app" },
+    app: { key: "app", vault: { configDir: ".obsidian" } },
     settings: { ...DEFAULT_SETTINGS, projectPath: "group/project", branch: "main" },
     pluginData: {
       settings: { ...DEFAULT_SETTINGS, projectPath: "group/project", branch: "main" },
@@ -99,6 +99,15 @@ describe("settings tab render", () => {
     expect(token?.desc).toContain("Repository → Read");
     expect(token?.desc).toContain("Commit → Create");
     expect(token?.desc).toContain("api scope");
+  });
+
+  it("explains device-specific settings with the vault's config folder", () => {
+    const container = renderTab(fakePlugin());
+    const row = container.rows.find((r: { name?: string }) => r.name === "Device-specific settings");
+
+    expect(row?.desc).toContain("relative to the .obsidian folder");
+    expect(row?.desc).toContain("appearance.json");
+    expect(row?.desc).toContain("the repository's version replaces this device's");
   });
 
   it("shows loading and blocks a second preview while GitLab is being checked", async () => {

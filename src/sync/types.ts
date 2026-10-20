@@ -34,6 +34,11 @@ export interface GitLabSyncSettings {
   conflictStrategy: ConflictStrategy;
   /** With Enclave: lock every unlocked note before a manual sync (sidebar button, Sync command). */
   lockBeforeManualSync: boolean;
+  /**
+   * Settings files this device keeps for itself: .gitignore-style patterns
+   * relative to the config folder. Stored with Envoy's settings, which never sync.
+   */
+  deviceSpecificPaths: string[];
 }
 
 /**
@@ -87,6 +92,11 @@ export interface LocalSyncState {
   deferredPaths?: string[];
   /** Conflicts waiting to be resolved in the conflict window. */
   conflicts?: ConflictRecord[];
+  /**
+   * Paths kept as device-specific settings at the last sync, so a path taken
+   * off the list can be handed back to sync.
+   */
+  deviceSpecificPaths?: string[];
 }
 
 export interface PluginData {

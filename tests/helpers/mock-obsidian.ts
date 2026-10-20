@@ -286,6 +286,10 @@ export class Setting {
     return this;
   }
 
+  addTextArea(_callback: (component: any) => void): this {
+    return this;
+  }
+
   addDropdown(callback: (component: any) => void): this {
     const dropdown = {
       addOption() {

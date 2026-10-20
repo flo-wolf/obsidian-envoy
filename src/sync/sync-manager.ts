@@ -14,6 +14,7 @@ import { IgnoreMatcher } from "./ignore-matcher";
 import { LocalMaterializer } from "./local-materializer";
 import { LocalSnapshotService, type LocalSnapshotEntry, type VersionState } from "./local-snapshot";
 import { calculateGitBlobId, toBase64 } from "./conflict-resolver";
+import { DeviceSpecificPaths } from "./device-specific";
 import { RemoteDiffService, type RemoteChange, type RemoteDiffClient } from "./remote-diff";
 import { StateStore } from "./state-store";
 import { SyncPlanner, type SyncPlan } from "./sync-planner";
@@ -35,6 +36,10 @@ export interface SyncResult {
   attempts?: number;
   /** Notes not uploaded this time because their plain text must not leave the device. */
   held?: HeldNote[];
+  /** Files written or deleted in this vault. */
+  pulled?: number;
+  /** Files created, changed or deleted on GitLab. */
+  pushed?: number;
 }
 
 export type SyncTrigger =
@@ -148,7 +153,8 @@ export interface SyncManagerOptions {
   materializer?: MaterializerLike;
   now?: () => number;
   nowDate?: () => Date;
-  notice?: (message: string) => void;
+  /** `detail` is an optional second, smaller line. */
+  notice?: (message: string, detail?: string) => void;
   createProgressNotice?: (message: string) => ProgressNotice;
   /** Overrides Obsidian's `Platform` so device naming can be exercised in tests. */
   platform?: DevicePlatform;
@@ -231,14 +237,17 @@ export class SyncManager {
   ): Promise<{ commitSha: string; dirtyPaths: number }> {
     const branch = await client.getBranch();
     this.validateBranch(branch);
-    const trackedFiles = treeToTrackedFiles(
+    const remoteFiles = treeToTrackedFiles(
       await client.getTree(branch.commit.id),
       this.isHardExcluded.bind(this),
     );
+    const deviceSpecific = await this.currentDeviceSpecific();
+    const trackedFiles = deviceSpecific.withoutMatches(remoteFiles);
     await this.options.stateStore.update((next) => {
       next.state.initialized = true;
       next.state.lastSyncedCommitSha = branch.commit.id;
       next.state.trackedFiles = trackedFiles;
+      next.state.deviceSpecificPaths = Object.keys(remoteFiles).filter((path) => deviceSpecific.matches(path)).sort();
       next.state.dirtyEntries = {};
       next.state.pendingTransaction = null;
       next.state.lastSyncAt = this.now();
@@ -391,7 +400,7 @@ export class SyncManager {
         firstRemoteSha: firstBranch.commit.id,
         progress,
       });
-      this.options.notice?.(completionMessage(result.held ?? []));
+      this.options.notice?.("Sync complete", completionDetail(result));
       return result;
     } catch (error) {
       const message = errorMessage(error);
@@ -417,6 +426,8 @@ export class SyncManager {
   }): Promise<SyncResult> {
     let remoteSha = input.firstRemoteSha;
     let attempt = 1;
+    const deviceSpecific = this.deviceSpecificFor(input.settings);
+    await this.updateDeviceSpecific(input.client, deviceSpecific, remoteSha);
 
     while (attempt <= MAX_PLAN_ATTEMPTS) {
       const data = await this.options.stateStore.load();
@@ -425,7 +436,7 @@ export class SyncManager {
         throw new Error("Sync is not initialized");
       }
 
-      const ignoreMatcher = this.createIgnoreMatcher();
+      const ignoreMatcher = this.createIgnoreMatcher(deviceSpecific);
       await ignoreMatcher.reload();
       const remoteDiff = this.createRemoteDiffService(input.client);
       const remote = await remoteDiff.discover({
@@ -433,7 +444,11 @@ export class SyncManager {
         remoteSha,
         baseIndex: data.state.trackedFiles,
       });
-      const trackedFiles = remote.remoteTree ?? data.state.trackedFiles;
+      // Device-specific settings stay as they are here: not tracked, and their
+      // remote changes are not applied.
+      const applicable = deviceSpecific.applicable(remote.changes);
+      await this.rememberDeviceSpecific(applicable.skippedPaths);
+      const trackedFiles = deviceSpecific.withoutMatches(remote.remoteTree ?? data.state.trackedFiles);
       const dirtyEntries = this.filteredDirtyEntries(
         data.state.dirtyEntries,
         trackedFiles,
@@ -446,7 +461,7 @@ export class SyncManager {
       const holds = await this.applyHolds(
         input.guard,
         await snapshotService.snapshot(dirtyEntries, trackedFiles),
-        remote.changes,
+        applicable.changes,
         data.state.deferredPaths ?? [],
       );
       if (remote.remoteTree) {
@@ -504,6 +519,7 @@ export class SyncManager {
         createdCommit,
         plan,
         holds,
+        deviceSpecific,
       );
       await this.rememberDeferred(holds.deferred);
       const transaction = this.pendingTransaction(createdCommit.id, finalizedPlan);
@@ -521,6 +537,8 @@ export class SyncManager {
         commitSha: createdCommit.id,
         attempts: attempt,
         held: holds.held,
+        pulled: transaction.materializeOperations.length,
+        pushed: plan.actions.length,
       };
     }
 
@@ -534,6 +552,7 @@ export class SyncManager {
     createdCommit: CreatedGitLabCommit,
     plan: SyncPlan,
     holds: Holds,
+    deviceSpecific: DeviceSpecificPaths,
   ): Promise<SyncPlan> {
     if (createdCommit.parent_ids.includes(plan.basedOnRemoteSha)) {
       return plan;
@@ -555,7 +574,7 @@ export class SyncManager {
     }
 
     const remoteChanges: RemoteChange[] = [];
-    for (const change of actual.changes) {
+    for (const change of deviceSpecific.applicable(actual.changes).changes) {
       const paths = changePaths(change);
       if (await this.firstHeld(holds, paths, (path) => holds.guard.holdRemote(path))) {
         holds.deferred = unique([...holds.deferred, ...paths]);
@@ -613,6 +632,8 @@ export class SyncManager {
       message: "Sync complete",
       commitSha: remoteSha,
       attempts: 1,
+      pulled: plan.materializeWithoutCommit.length,
+      pushed: 0,
     };
   }
 
@@ -851,14 +872,82 @@ export class SyncManager {
     return client;
   }
 
-  private createIgnoreMatcher(): IgnoreMatcherLike {
+  private deviceSpecificFor(settings: GitLabSyncSettings): DeviceSpecificPaths {
+    return new DeviceSpecificPaths(this.options.vault?.configDir ?? ".obsidian", settings.deviceSpecificPaths ?? []);
+  }
+
+  private async currentDeviceSpecific(): Promise<DeviceSpecificPaths> {
+    const data = await this.options.stateStore.load();
+    return this.deviceSpecificFor(this.options.settings ?? data.settings);
+  }
+
+  /**
+   * Keeps the record of device-specific paths current, and hands paths that
+   * were taken off the list back to sync: the repository's version replaces
+   * this device's, as when connecting, or this device's file is uploaded if
+   * the repository has none.
+   */
+  private async updateDeviceSpecific(
+    client: GitLabClientLike,
+    deviceSpecific: DeviceSpecificPaths,
+    remoteSha: string,
+  ): Promise<void> {
+    const vault = this.options.vault;
+    const data = await this.options.stateStore.load();
+    const before = data.state.deviceSpecificPaths ?? [];
+    const localSettings = vault ? await this.listLocalFiles(normalizePath(vault.configDir)) : [];
+    const current = unique([...before, ...Object.keys(data.state.trackedFiles), ...localSettings])
+      .filter((path) => deviceSpecific.matches(path))
+      .sort();
+    const released = before.filter((path) => !deviceSpecific.matches(path));
+
+    const tracked: Record<string, TrackedFile> = {};
+    const upload: string[] = [];
+    for (const path of released) {
+      const remote = await client.getRawFile(path, remoteSha);
+      if (remote) {
+        const bytes = new Uint8Array(remote);
+        await this.getMaterializer().apply([{ type: "write", path, contentBase64: toBase64(bytes) }]);
+        tracked[path] = { blobId: await calculateGitBlobId(bytes), mode: "100644", size: bytes.byteLength };
+      } else if (vault && (await vault.adapter.exists(path))) {
+        upload.push(path);
+      }
+    }
+
+    await this.options.stateStore.update((next) => {
+      for (const path of current) {
+        delete next.state.trackedFiles[path];
+        delete next.state.dirtyEntries[path];
+      }
+      for (const path of released) {
+        delete next.state.dirtyEntries[path];
+      }
+      Object.assign(next.state.trackedFiles, tracked);
+      for (const path of upload) {
+        next.state.dirtyEntries[path] = { path, operation: "upsert", recordedAt: this.now() };
+      }
+      next.state.deviceSpecificPaths = current;
+    });
+  }
+
+  /** Adds paths whose remote change this device skipped, so taking them off the list later fetches them. */
+  private async rememberDeviceSpecific(paths: string[]): Promise<void> {
+    if (paths.length === 0) {
+      return;
+    }
+    await this.options.stateStore.update((data) => {
+      data.state.deviceSpecificPaths = unique([...(data.state.deviceSpecificPaths ?? []), ...paths]).sort();
+    });
+  }
+
+  private createIgnoreMatcher(deviceSpecific?: DeviceSpecificPaths): IgnoreMatcherLike {
     if (this.options.createIgnoreMatcher) {
       return this.options.createIgnoreMatcher();
     }
     if (!this.options.vault) {
       throw new Error("Vault is required for ignore matching");
     }
-    return new IgnoreMatcher(this.options.vault);
+    return new IgnoreMatcher(this.options.vault, "envoy", deviceSpecific);
   }
 
   private createLocalSnapshotService(
@@ -953,7 +1042,7 @@ export class SyncManager {
     if (!this.options.vault) {
       return [];
     }
-    const ignoreMatcher = this.createIgnoreMatcher();
+    const ignoreMatcher = this.createIgnoreMatcher(await this.currentDeviceSpecific());
     await ignoreMatcher.reload();
     const localFiles = await this.listLocalFiles("", ignoreMatcher);
     // Empty tracked-files map: this lists what a fresh sync would push, so no file is yet tracked.
@@ -965,7 +1054,7 @@ export class SyncManager {
       return;
     }
     const data = await this.options.stateStore.load();
-    const ignoreMatcher = this.createIgnoreMatcher();
+    const ignoreMatcher = this.createIgnoreMatcher(await this.currentDeviceSpecific());
     await ignoreMatcher.reload();
     const localFiles = await this.listLocalFiles("", ignoreMatcher);
     const localSet = new Set(localFiles);
@@ -1072,14 +1161,18 @@ function unique(paths: string[]): string[] {
   return [...new Set(paths)];
 }
 
-/** "Sync complete", plus how many notes were held back. */
-function completionMessage(held: HeldNote[]): string {
-  if (held.length === 0) {
-    return "Sync complete";
+/** The line under "Sync complete": files pulled and pushed, and notes held back. */
+export function completionDetail(result: Pick<SyncResult, "pulled" | "pushed" | "held">): string {
+  const pulled = result.pulled ?? 0;
+  const pushed = result.pushed ?? 0;
+  const counts = pulled === 0 && pushed === 0 ? "No changes" : `${pulled} ↓   ${pushed} ↑`;
+  const held = result.held?.length ?? 0;
+  if (held === 0) {
+    return counts;
   }
-  return held.length === 1
-    ? "Sync complete. 1 note was held back until it's locked."
-    : `Sync complete. ${held.length} notes were held back until they're locked.`;
+  return held === 1
+    ? `${counts}\n1 note held back until it's locked`
+    : `${counts}\n${held} notes held back until they're locked`;
 }
 
 function isRemoteDiffClient(client: GitLabClientLike): client is GitLabClientLike & RemoteDiffClient {

@@ -281,9 +281,30 @@ of removing the file.
 - **Log level** — `Off` by default. Use `Debug` only while diagnosing sync behavior.
 - **Copy logs** / **Clean logs** — export or clear the plugin log.
 - **Show GitLab sync status** (command) — base commit, pending local changes, last sync result.
-- **Reset local sync state** — forgets the local base commit, tracked index, and journal. It does not
-  delete files and does not change GitLab; the next Connect re-reads the repository as the source of
-  truth.
+- **Reset local sync state** — makes this device forget what it remembers about past syncs, as if it
+  had never been connected. Use it when sync is stuck or keeps failing. No file is deleted and nothing
+  changes on GitLab. Afterwards you connect again: files that match the repository are kept, settings
+  files take the repository's version, and any other file that differs is kept in both versions.
+
+### Device-specific settings
+
+Envoy syncs the whole config folder (`.obsidian`), so all devices share one setup. When a device
+should differ, say a phone with its own theme or fewer plugins, list the settings files it keeps for
+itself under **This device → Device-specific settings**, one per line, relative to the config folder:
+
+```gitignore
+appearance.json         # theme, light or dark mode, font size, enabled CSS snippets
+community-plugins.json  # which community plugins are turned on
+```
+
+Envoy never uploads a listed file from that device and never changes or deletes it there; the other
+devices keep sharing theirs. Theme and plugin files themselves keep syncing, so every device has them
+and each picks its own. A folder ends with a slash (`themes/`). The list is stored with Envoy's own
+settings, which never sync, so each device has its own.
+
+Taking a file off the list shares it again: on the next sync the repository's version replaces this
+device's (restart Obsidian to load it), or, if the repository has none, this device's file is
+uploaded. Keep Enclave's settings shared: they hold which folders stay locked.
 
 ## Limitations
 

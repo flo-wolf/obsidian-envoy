@@ -1,5 +1,6 @@
 import ignore, { type Ignore } from "ignore";
 import { normalizePath } from "obsidian";
+import type { DeviceSpecificPaths } from "./device-specific";
 import type { TrackedFile } from "./types";
 
 interface VaultAdapter {
@@ -24,6 +25,8 @@ export class IgnoreMatcher {
   constructor(
     private vault: IgnoreVault,
     private pluginId = "envoy",
+    // Device-specific settings are never synced from here, even when tracked.
+    private deviceSpecific?: DeviceSpecificPaths,
   ) {}
 
   async reload(): Promise<void> {
@@ -34,7 +37,7 @@ export class IgnoreMatcher {
 
   isIgnored(path: string, trackedFiles: Record<string, TrackedFile>): boolean {
     const normalized = normalizePath(path);
-    if (this.isHardExcluded(normalized)) {
+    if (this.isHardExcluded(normalized) || this.deviceSpecific?.matches(normalized)) {
       return true;
     }
     if (trackedFiles[normalized]) {
@@ -60,7 +63,7 @@ export class IgnoreMatcher {
 
   isDirIgnored(path: string): boolean {
     const normalized = normalizePath(path);
-    if (this.isHardExcluded(normalized)) {
+    if (this.isHardExcluded(normalized) || this.deviceSpecific?.matchesFolder(normalized)) {
       return true;
     }
     return dirIgnoredByRuleSets(normalized, this.ruleSets);

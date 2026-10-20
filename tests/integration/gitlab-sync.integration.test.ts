@@ -71,7 +71,7 @@ describe("GitLab sync integration", () => {
 
     const result = await setup.manager().sync("startup");
 
-    expect(result).toMatchObject({ status: "success", commitSha: setup.server.head });
+    expect(result).toMatchObject({ status: "success", commitSha: setup.server.head, pulled: 3, pushed: 0 });
     expect(setup.server.commitActions).toEqual([]);
     expect(setup.vault.text("desktop-create.md")).toBe("created on desktop");
     expect(setup.vault.text("desktop-update.md")).toBe("updated on desktop");
@@ -165,7 +165,7 @@ describe("GitLab sync integration", () => {
 
     const result = await setup.manager().sync("manual");
 
-    expect(result).toMatchObject({ status: "success", attempts: 2 });
+    expect(result).toMatchObject({ status: "success", attempts: 2, pulled: 1, pushed: 1 });
     expect(setup.server.branchReads).toBe(branchReadsBeforeSync + 4);
     expect(setup.server.fileText("note.md")).toBe("local");
     expect(setup.vault.text("desktop.md")).toBe("raced in");
@@ -266,6 +266,103 @@ describe("GitLab sync integration", () => {
     expect(setup.server.fileText("notes/0042.md")).toBe("dirty local");
     await expectNoMetadata(setup);
   }, 20_000);
+});
+
+describe("Device-specific settings", () => {
+  beforeEach(() => {
+    requestUrlMock.mockReset();
+  });
+
+  const uploaded = (setup: Awaited<ReturnType<typeof initializedFixture>>) =>
+    setup.server.commitActions.flat().map((action) => action.file_path);
+
+  it("never uploads a listed file and doesn't apply its remote changes", async () => {
+    const setup = await initializedFixture({
+      ".obsidian/appearance.json": "shared",
+      "note.md": "base",
+    });
+    setup.settings.deviceSpecificPaths = ["appearance.json"];
+    await setup.writeDirty(".obsidian/appearance.json", "phone");
+    await setup.writeDirty("note.md", "phone note");
+    await setup.server.desktopCommit({ ".obsidian/appearance.json": "desktop", "other.md": "desktop" });
+
+    const result = await setup.manager().sync("manual");
+
+    expect(result.status).toBe("success");
+    expect(uploaded(setup)).toEqual(["note.md"]);
+    expect(setup.server.fileText(".obsidian/appearance.json")).toBe("desktop");
+    expect(setup.vault.text(".obsidian/appearance.json")).toBe("phone");
+    expect(setup.vault.text("other.md")).toBe("desktop");
+    const state = (await setup.store.load()).state;
+    expect(state.trackedFiles[".obsidian/appearance.json"]).toBeUndefined();
+    expect(state.dirtyEntries[".obsidian/appearance.json"]).toBeUndefined();
+    expect(state.deviceSpecificPaths).toEqual([".obsidian/appearance.json"]);
+
+    // A remote deletion doesn't touch this device's file either.
+    await setup.server.desktopCommit({ ".obsidian/appearance.json": null });
+    await setup.manager().sync("manual");
+    expect(setup.vault.text(".obsidian/appearance.json")).toBe("phone");
+  });
+
+  it("covers a folder's contents with a folder entry", async () => {
+    const setup = await initializedFixture({ ".obsidian/themes/Minimal/theme.css": "shared" });
+    setup.settings.deviceSpecificPaths = ["themes/"];
+    await setup.writeDirty(".obsidian/themes/Minimal/theme.css", "phone");
+    await setup.writeDirty(".obsidian/themes/Phone/theme.css", "phone only");
+
+    await setup.manager().sync("manual");
+
+    expect(uploaded(setup)).toEqual([]);
+    expect(setup.server.fileText(".obsidian/themes/Minimal/theme.css")).toBe("shared");
+  });
+
+  it("takes the repository's version when a file comes off the list", async () => {
+    const setup = await initializedFixture({ ".obsidian/appearance.json": "shared" });
+    setup.settings.deviceSpecificPaths = ["appearance.json"];
+    await setup.writeDirty(".obsidian/appearance.json", "phone");
+    await setup.server.desktopCommit({ ".obsidian/appearance.json": "desktop" });
+    await setup.manager().sync("manual");
+
+    setup.settings.deviceSpecificPaths = [];
+    const result = await setup.manager().sync("manual");
+
+    expect(result.status).toBe("success");
+    expect(uploaded(setup)).toEqual([]);
+    expect(setup.vault.text(".obsidian/appearance.json")).toBe("desktop");
+    const state = (await setup.store.load()).state;
+    expect(state.trackedFiles[".obsidian/appearance.json"]?.blobId).toBe(
+      (await setup.server.tree()).find((item) => item.path === ".obsidian/appearance.json")?.id,
+    );
+    expect(state.deviceSpecificPaths).toEqual([]);
+
+    // Shared again: a change here goes up as usual.
+    await setup.writeDirty(".obsidian/appearance.json", "phone again");
+    await setup.manager().sync("manual");
+    expect(setup.server.fileText(".obsidian/appearance.json")).toBe("phone again");
+  });
+
+  it("uploads this device's file when it comes off the list and the repository has none", async () => {
+    const setup = await initializedFixture({ "note.md": "base" });
+    setup.settings.deviceSpecificPaths = ["hotkeys.json"];
+    await setup.writeDirty(".obsidian/hotkeys.json", "mine");
+    await setup.manager().sync("manual");
+    expect(setup.server.fileText(".obsidian/hotkeys.json")).toBeNull();
+
+    setup.settings.deviceSpecificPaths = [];
+    await setup.manager().sync("manual");
+
+    expect(setup.server.fileText(".obsidian/hotkeys.json")).toBe("mine");
+  });
+
+  it("never matches files outside the config folder", async () => {
+    const setup = await initializedFixture({ "appearance.json": "base" });
+    setup.settings.deviceSpecificPaths = ["appearance.json"];
+    await setup.writeDirty("appearance.json", "edited");
+
+    await setup.manager().sync("manual");
+
+    expect(setup.server.fileText("appearance.json")).toBe("edited");
+  });
 });
 
 describe("Enclave: plain text never leaves the device", () => {
@@ -500,6 +597,7 @@ async function initializedFixture(initialRemoteFiles: Record<string, string | Ui
     vault,
     store,
     journal,
+    settings,
     async writeDirty(path: string, content: string | Uint8Array): Promise<void> {
       await vault.write(path, content);
       await journal.recordUpsert(path);
@@ -716,6 +814,7 @@ function gitlabSettings(server: GitLabTestServer): GitLabSyncSettings {
     loggingEnabled: false,
     conflictStrategy: "remote",
     lockBeforeManualSync: false,
+    deviceSpecificPaths: [],
   };
 }
 
