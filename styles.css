@@ -75,3 +75,8 @@
 	flex-wrap: wrap;
 	justify-content: flex-end;
 }
+
+/* Settings: keep the line breaks of the token permissions list. */
+.envoy-token-setting .setting-item-description {
+	white-space: pre-line;
+}

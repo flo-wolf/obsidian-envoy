@@ -36,6 +36,20 @@ export function vaultSetupViewState(state: LocalSyncState): VaultSetupViewState 
   };
 }
 
+/**
+ * What the GitLab token needs, shown under the token field (line breaks kept
+ * by styles.css). Envoy uses the REST API for branches, compare, the tree, raw
+ * files and blobs, per-file last commits, and creating commits.
+ */
+export const TOKEN_HELP = [
+  "Stored in Obsidian's secret storage on this device, never in the vault.",
+  "Use a fine-grained token limited to this project, with these permissions:",
+  "• Project: Read",
+  "• Repository: Code Read, Commit Read, Commit Create, Branch Read, Repository Read, Repository Tag Read",
+  "• Protected Branch Read, if the branch is protected (new projects protect main)",
+  "Without fine-grained tokens: a project access token with the Maintainer role and the api scope. write_repository alone isn't enough.",
+].join("\n");
+
 export default class GitLabSyncSettingsTab extends PluginSettingTab {
   private connectPreviewInProgress = false;
 
@@ -94,7 +108,8 @@ export default class GitLabSyncSettingsTab extends PluginSettingTab {
     let tokenInput: TextComponent;
     new Setting(containerEl)
       .setName("GitLab token")
-      .setDesc("Stored securely in Obsidian SecretStorage on this device")
+      .setDesc(TOKEN_HELP)
+      .setClass("envoy-token-setting")
       .addButton((button) =>
         button.setIcon("eye-off").onClick(() => {
           tokenInput.inputEl.type =

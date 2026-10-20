@@ -274,6 +274,10 @@ export class Setting {
     return this;
   }
 
+  setClass(_cls: string): this {
+    return this;
+  }
+
   addText(_callback: (component: any) => void): this {
     return this;
   }
