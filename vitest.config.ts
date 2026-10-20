@@ -4,7 +4,7 @@ import { defineConfig } from "vitest/config";
 export default defineConfig({
   resolve: {
     alias: {
-      obsidian: fileURLToPath(new URL("./mock-obsidian.ts", import.meta.url)),
+      obsidian: fileURLToPath(new URL("./tests/helpers/mock-obsidian.ts", import.meta.url)),
     },
   },
   test: {

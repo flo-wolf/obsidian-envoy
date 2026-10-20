@@ -3,7 +3,7 @@ import { DEFAULT_SETTINGS, DEFAULT_STATE } from "../src/settings/settings";
 import GitLabSyncSettingsTab, { vaultSetupViewState } from "../src/settings/settings-tab";
 import { ConnectConfirmModal } from "../src/views/connect-confirm-modal";
 import type { ConnectPreview } from "../src/sync/bootstrap-service";
-import { MockElement } from "../mock-obsidian";
+import { MockElement } from "./helpers/mock-obsidian";
 
 describe("settings setup view state", () => {
   it("shows setup choices before the vault is initialized", () => {
