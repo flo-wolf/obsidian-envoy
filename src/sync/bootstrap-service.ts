@@ -168,7 +168,9 @@ export class BootstrapService {
 
   // The vault as the ignore rules will see it after merge(): a .gitignore that
   // exists in the repository replaces the local one.
-  private vaultAfterMerge(remoteIndex: Record<string, TrackedFile>): BootstrapVault {
+  private vaultAfterMerge(
+    remoteIndex: Record<string, TrackedFile>,
+  ): ConstructorParameters<typeof IgnoreMatcher>[0] {
     const vault = this.options.vault;
     const client = this.options.client;
     const remoteIgnoreFile = (path: string): TrackedFile | undefined => {
@@ -178,8 +180,10 @@ export class BootstrapService {
     };
     return {
       configDir: vault.configDir,
+      // Delegate method by method: Obsidian's adapter is a class instance, so
+      // spreading it would drop its prototype methods.
       adapter: {
-        ...vault.adapter,
+        list: async (path) => await vault.adapter.list(path),
         exists: async (path) => !!remoteIgnoreFile(path) || (await vault.adapter.exists(path)),
         read: async (path) => {
           const remote = remoteIgnoreFile(path);

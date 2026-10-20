@@ -59,7 +59,7 @@ function fakeVault(initialFiles: Record<string, Uint8Array> = {}) {
     }
   }
 
-  const adapter = {
+  const adapterMethods = {
     list: vi.fn(async (path: string) => {
       const prefix = path === "" ? "" : `${path}/`;
       const localFiles = new Set<string>();
@@ -113,6 +113,8 @@ function fakeVault(initialFiles: Record<string, Uint8Array> = {}) {
       files.set(path, new Uint8Array(data.slice(0)));
     }),
   };
+  // Like Obsidian's adapter, a class instance whose methods live on the prototype.
+  const adapter = Object.create(adapterMethods) as typeof adapterMethods;
 
   return {
     vault: { configDir: ".obsidian", adapter },
