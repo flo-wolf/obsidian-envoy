@@ -1,2 +1,2 @@
-- **Sync history** at the bottom of the settings: the latest 30 syncs on this device that changed something or failed. Each one opens to the files pulled, pushed, merged, in conflict or held back.
-- Envoy warns (once per device, and in its settings) while Obsidian's own Sync core plugin is turned on, since two sync services on the same files get in each other's way.
+- **Sync now** at the top of the settings, once the vault is connected, with when this device last synced.
+- A shorter README about what Envoy does for you, with the full details in the [Envoy guide](https://github.com/flo-wolf/obsidian-envoy/blob/main/docs/guide.md).

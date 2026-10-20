@@ -54,6 +54,7 @@ function fakePlugin() {
     connect: vi.fn(async () => undefined),
     saveSettings: vi.fn(async () => undefined),
     loadSyncHistory: vi.fn(async (): Promise<SyncHistoryEntry[]> => []),
+    sync: vi.fn(async () => undefined),
     clearSyncHistory: vi.fn(async () => undefined),
   };
 }
@@ -69,6 +70,22 @@ function renderTab(plugin: ReturnType<typeof fakePlugin>) {
 describe("settings tab render", () => {
   afterEach(() => {
     vi.restoreAllMocks();
+  });
+
+  it("offers Sync now at the top once the vault is connected", async () => {
+    const plugin = fakePlugin();
+    Object.assign(plugin.pluginData.state, { initialized: true, lastSyncedCommitSha: "abc" });
+    const container = renderTab(plugin);
+
+    const syncNow = container.buttons.find((button) => button.buttonText === "Sync now");
+    expect(container.buttons[0]).toBe(syncNow);
+    syncNow?.clickHandler?.();
+    await vi.waitFor(() => expect(plugin.sync).toHaveBeenCalledWith("manual"));
+  });
+
+  it("has no Sync now button before connecting", () => {
+    const labels = renderTab(fakePlugin()).buttons.map((button) => button.buttonText);
+    expect(labels).not.toContain("Sync now");
   });
 
   it("renders a single Connect to GitLab button when setup is available", () => {

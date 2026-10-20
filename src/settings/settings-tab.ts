@@ -5,7 +5,7 @@ import { copyToClipboard } from "../utils";
 import { enclavePresence } from "../enclave/enclave-api";
 import { ConnectConfirmModal } from "../views/connect-confirm-modal";
 import { parseDeviceSpecificEntries } from "../sync/device-specific";
-import { renderSyncHistory } from "../views/sync-history-view";
+import { formatWhen, renderSyncHistory } from "../views/sync-history-view";
 import { OBSIDIAN_SYNC_WARNING, obsidianSyncEnabled } from "../obsidian-sync";
 
 export interface VaultSetupViewState {
@@ -79,6 +79,23 @@ export default class GitLabSyncSettingsTab extends PluginSettingTab {
           .setClass("envoy-warning-setting");
       }
     });
+
+    const state = this.plugin.pluginData.state;
+    if (state.initialized) {
+      new Setting(containerEl)
+        .setName("Sync now")
+        .setDesc(state.lastSyncAt ? `Last synced: ${formatWhen(state.lastSyncAt)}` : "Not synced yet")
+        .addButton((button) =>
+          button
+            .setButtonText("Sync now")
+            .setCta()
+            .onClick(async () => {
+              button.setDisabled(true).setButtonText("Syncing…");
+              await this.plugin.sync("manual");
+              this.display();
+            }),
+        );
+    }
 
     new Setting(containerEl).setName("GitLab repository").setHeading();
 
