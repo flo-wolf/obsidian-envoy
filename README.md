@@ -59,9 +59,10 @@ Four steps: create the repository and a token, connect the vault, turn on automa
    settings, under access tokens) or one for the project (**Project → Settings → Access tokens**):
 
    - **Access:** only the vault project.
-   - **Permissions:** **Branch: Read**, **Repository: Read**, **Commit: Create**.
+   - **Permissions:** **Project: Read**, **Branch: Read**, **Repository: Read**, **Commit: Create**.
 
-   That's all Envoy calls: branches (Branch: Read); compare, the file tree, raw files and blobs,
+   That's all Envoy calls: the project itself, to see whether it's empty and which branch is the
+   default (Project: Read); branches (Branch: Read); compare, the file tree, raw files and blobs,
    and the archive (Repository: Read); and creating commits (Commit: Create). See GitLab's
    [fine-grained permissions for the REST API](https://docs.gitlab.com/auth/tokens/fine_grained_access_tokens_rest/).
    Pushing to a protected branch such as `main` depends on your role in the project, not on the

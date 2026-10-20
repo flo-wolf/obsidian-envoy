@@ -38,14 +38,16 @@ export function vaultSetupViewState(state: LocalSyncState): VaultSetupViewState 
 
 /**
  * What the GitLab token needs, shown under the token field (line breaks kept
- * by styles.css). Envoy calls the REST API for branches (Branch: Read); compare,
- * the tree, raw files and blobs, and the archive (Repository: Read); and
- * creating commits (Commit: Create). See GitLab's "Fine-grained permissions for
- * REST API" page.
+ * by styles.css). Envoy calls the REST API for the project itself, to see
+ * whether it's empty and its default branch (Project: Read); branches (Branch:
+ * Read); compare, the tree, raw files and blobs, and the archive (Repository:
+ * Read); and creating commits (Commit: Create). See GitLab's "Fine-grained
+ * permissions for REST API" page.
  */
 export const TOKEN_HELP = [
   "Stored in Obsidian's secret storage on this device, never in the vault.",
   "Use a fine-grained token limited to this project, with these permissions:",
+  "• Project: Read",
   "• Branch: Read",
   "• Repository: Read",
   "• Commit: Create",
