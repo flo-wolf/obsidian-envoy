@@ -2,6 +2,7 @@ import { App, Modal, Notice, PluginSettingTab, Setting, TextComponent } from "ob
 import GitLabGitlessSyncPlugin from "../main";
 import type { LocalSyncState } from "../settings/settings";
 import { copyToClipboard } from "../utils";
+import { enclavePresence } from "../enclave/enclave-api";
 import { ConnectConfirmModal } from "../views/connect-confirm-modal";
 
 export interface VaultSetupViewState {
@@ -328,6 +329,21 @@ export default class GitLabSyncSettingsTab extends PluginSettingTab {
             await this.plugin.saveSettings();
           }),
       );
+
+    // Only meaningful with Enclave, so only shown when it's enabled.
+    if (enclavePresence(this.app).state !== "absent") {
+      new Setting(containerEl)
+        .setName("Lock all notes before syncing")
+        .setDesc(
+          "When you sync with the sidebar button or the Sync command, Enclave locks every unlocked note first, so all your changes go up. Automatic syncs never lock your notes; they hold unlocked notes back until they lock.",
+        )
+        .addToggle((toggle) =>
+          toggle.setValue(this.plugin.settings.lockBeforeManualSync).onChange(async (value) => {
+            this.plugin.settings.lockBeforeManualSync = value;
+            await this.plugin.saveSettings();
+          }),
+        );
+    }
 
     new Setting(containerEl).setName("Interface").setHeading();
 

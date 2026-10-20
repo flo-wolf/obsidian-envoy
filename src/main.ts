@@ -58,6 +58,7 @@ export default class GitLabGitlessSyncPlugin extends Plugin {
       logger: this.logger,
       createProgressNotice: (message) => new Notice(message, 0),
       notice: (message) => new Notice(message, 5000),
+      lockBeforeSync: (trigger) => trigger === "manual" && this.settings.lockBeforeManualSync,
     });
     this.registerAppLifecycleHandlers();
 

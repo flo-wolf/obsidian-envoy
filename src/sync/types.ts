@@ -32,6 +32,8 @@ export interface GitLabSyncSettings {
   loggingLevel: LogLevel;
   loggingEnabled: boolean;
   conflictStrategy: ConflictStrategy;
+  /** With Enclave: lock every unlocked note before a manual sync (sidebar button, Sync command). */
+  lockBeforeManualSync: boolean;
 }
 
 export interface MaterializeOperation {
