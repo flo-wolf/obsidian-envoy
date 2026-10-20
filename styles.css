@@ -1,9 +1,77 @@
-.hidden-navigation-header {
-    display: none;
+/* Conflict window */
+
+.courier-conflict-modal {
+	width: min(960px, 95vw);
 }
 
-.padless-conflicts-view-container {
-    padding: 0;
-    height: 100%;
-    width: 100%;
+.courier-conflict-hint {
+	color: var(--text-muted);
+	font-size: var(--font-ui-small);
+}
+
+.courier-conflict-chunks {
+	display: flex;
+	flex-direction: column;
+	gap: var(--size-4-2);
+	margin-block: var(--size-4-3);
+}
+
+.courier-chunk pre {
+	margin: 0;
+	padding: var(--size-4-2);
+	white-space: pre-wrap;
+	word-break: break-word;
+	font-size: var(--font-ui-small);
+	border-radius: var(--radius-s);
+	background-color: var(--background-secondary);
+}
+
+.courier-chunk-same pre {
+	color: var(--text-muted);
+	background-color: transparent;
+}
+
+.courier-chunk-skipped,
+.courier-chunk-label,
+.courier-conflict-side-label {
+	color: var(--text-muted);
+	font-size: var(--font-ui-smaller);
+	padding-block: var(--size-2-1);
+}
+
+.courier-chunk-auto pre {
+	border-inline-start: 3px solid var(--color-green);
+}
+
+.courier-chunk-conflict {
+	padding: var(--size-4-2);
+	border: 1px solid var(--background-modifier-border);
+	border-radius: var(--radius-m);
+}
+
+/* This device's and GitLab's version side by side; stacked on phones. */
+.courier-conflict-sides {
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	gap: var(--size-4-2);
+}
+
+.is-mobile .courier-conflict-sides {
+	grid-template-columns: 1fr;
+}
+
+.courier-conflict-side.is-chosen pre {
+	border-inline-start: 3px solid var(--interactive-accent);
+}
+
+.courier-conflict-choice,
+.courier-conflict-actions {
+	border-top: none;
+	flex-wrap: wrap;
+}
+
+.courier-conflict-choice .setting-item-control,
+.courier-conflict-actions .setting-item-control {
+	flex-wrap: wrap;
+	justify-content: flex-end;
 }

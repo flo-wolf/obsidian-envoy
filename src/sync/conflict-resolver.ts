@@ -1,5 +1,6 @@
 import { isEnclaveLocked } from "../enclave/locked-format";
 import type { GitLabCommitAction } from "../gitlab/types";
+import { diffTextEdits, type TextEdit } from "./text-diff";
 import type { LocalSnapshotEntry, VersionState } from "./local-snapshot";
 import type { ConflictRecord, ConflictStrategy, MaterializeOperation, TrackedFile } from "./types";
 
@@ -486,12 +487,6 @@ function autoMergeText(
   return merged === null ? null : new TextEncoder().encode(merged);
 }
 
-interface TextEdit {
-  start: number;
-  end: number;
-  lines: string[];
-}
-
 function mergeTextVersions(
   baseText: string,
   localText: string,
@@ -521,55 +516,6 @@ function mergeTextVersions(
 
   mergedLines.push(...baseLines.slice(cursor));
   return mergedLines.join("\n");
-}
-
-function diffTextEdits(baseLines: string[], changedLines: string[]): TextEdit[] {
-  const lcs = lcsTable(baseLines, changedLines);
-  const edits: TextEdit[] = [];
-  let baseIndex = 0;
-  let changedIndex = 0;
-
-  while (baseIndex < baseLines.length || changedIndex < changedLines.length) {
-    if (
-      baseIndex < baseLines.length &&
-      changedIndex < changedLines.length &&
-      baseLines[baseIndex] === changedLines[changedIndex]
-    ) {
-      baseIndex += 1;
-      changedIndex += 1;
-      continue;
-    }
-
-    const start = baseIndex;
-    const replacement: string[] = [];
-    while (baseIndex < baseLines.length || changedIndex < changedLines.length) {
-      if (
-        baseIndex < baseLines.length &&
-        changedIndex < changedLines.length &&
-        baseLines[baseIndex] === changedLines[changedIndex]
-      ) {
-        break;
-      }
-
-      const skipChanged = changedIndex < changedLines.length
-        ? lcs[baseIndex][changedIndex + 1] ?? 0
-        : -1;
-      const skipBase = baseIndex < baseLines.length
-        ? lcs[baseIndex + 1]?.[changedIndex] ?? 0
-        : -1;
-
-      if (changedIndex < changedLines.length && skipChanged >= skipBase) {
-        replacement.push(changedLines[changedIndex]);
-        changedIndex += 1;
-      } else {
-        baseIndex += 1;
-      }
-    }
-
-    edits.push({ start, end: baseIndex, lines: replacement });
-  }
-
-  return edits;
 }
 
 function editsConflict(left: TextEdit[], right: TextEdit[]): boolean {
@@ -602,23 +548,6 @@ function rangesOverlap(left: TextEdit, right: TextEdit): boolean {
 
 function sameStringArray(left: string[], right: string[]): boolean {
   return left.length === right.length && left.every((line, index) => line === right[index]);
-}
-
-function lcsTable(left: string[], right: string[]): number[][] {
-  const table = Array.from(
-    { length: left.length + 1 },
-    () => Array<number>(right.length + 1).fill(0),
-  );
-
-  for (let leftIndex = left.length - 1; leftIndex >= 0; leftIndex -= 1) {
-    for (let rightIndex = right.length - 1; rightIndex >= 0; rightIndex -= 1) {
-      table[leftIndex][rightIndex] = left[leftIndex] === right[rightIndex]
-        ? table[leftIndex + 1][rightIndex + 1] + 1
-        : Math.max(table[leftIndex + 1][rightIndex], table[leftIndex][rightIndex + 1]);
-    }
-  }
-
-  return table;
 }
 
 export function toBase64(bytes: Uint8Array): string {

@@ -8,6 +8,10 @@ import { SyncStatusModal } from "./views/sync-status-modal";
 import { BootstrapService, type ConnectPreview } from "./sync/bootstrap-service";
 import { GitLabClient } from "./gitlab/client";
 import { GitLabNotFoundError } from "./gitlab/errors";
+import { ConflictService } from "./conflicts/conflict-service";
+import { enclaveApi } from "./enclave/enclave-api";
+import { ConflictListModal, ConflictModal } from "./views/conflict-modal";
+import type { ConflictRecord } from "./sync/types";
 
 const FOREGROUND_SYNC_COOLDOWN_MS = 30_000;
 const BACKGROUND_SYNC_COOLDOWN_MS = 30_000;
@@ -24,6 +28,7 @@ export default class GitLabGitlessSyncPlugin extends Plugin {
   pluginData: PluginData;
   stateStore: StateStore;
   syncManager: SyncManager;
+  conflicts: ConflictService;
   logger: Logger;
 
   syncRibbonIcon: HTMLElement | null = null;
@@ -59,6 +64,12 @@ export default class GitLabGitlessSyncPlugin extends Plugin {
       createProgressNotice: (message) => new Notice(message, 0),
       notice: (message) => new Notice(message, 5000),
       lockBeforeSync: (trigger) => trigger === "manual" && this.settings.lockBeforeManualSync,
+    });
+    this.conflicts = new ConflictService({
+      vault: this.app.vault,
+      stateStore: this.stateStore,
+      readBase: (blobId) => this.syncManager.readBlob(blobId),
+      enclave: () => enclaveApi(this.app),
     });
     this.registerAppLifecycleHandlers();
 
@@ -105,6 +116,14 @@ export default class GitLabGitlessSyncPlugin extends Plugin {
     });
 
     this.addCommand({
+      id: "resolve-sync-conflicts",
+      name: "Resolve sync conflicts",
+      repeatable: false,
+      icon: "git-merge",
+      callback: () => void this.openConflicts(),
+    });
+
+    this.addCommand({
       id: "show-gitlab-sync-status",
       name: "Show GitLab sync status",
       repeatable: false,
@@ -135,7 +154,46 @@ export default class GitLabGitlessSyncPlugin extends Plugin {
 
     const result = await this.syncManager.sync(trigger);
     this.pluginData = await this.stateStore.load();
+    if (result.status === "conflict") {
+      // After a sync the user started, go straight to the conflicts; automatic
+      // syncs only mention them, so they don't interrupt.
+      if (trigger === "manual") {
+        void this.openConflicts();
+      } else {
+        new Notice('Sync found conflicts. Run "Resolve sync conflicts" to compare the versions.', 8000);
+      }
+    }
     return result;
+  }
+
+  /** Open the conflict window, or the list of conflicts when there are several. */
+  async openConflicts(): Promise<void> {
+    const records = await this.conflicts.pending();
+    if (records.length === 0) {
+      new Notice("No sync conflicts to resolve.");
+      return;
+    }
+    if (records.length === 1) {
+      await this.resolveConflict(records[0]);
+      return;
+    }
+    new ConflictListModal(this.app, records, (record) => void this.resolveConflict(record)).open();
+  }
+
+  private async resolveConflict(record: ConflictRecord): Promise<void> {
+    try {
+      // For a locked note, Enclave may ask for passwords here.
+      const conflict = await this.conflicts.open(record);
+      if (conflict) {
+        new ConflictModal(this.app, this.conflicts, conflict, () => void this.refreshState()).open();
+      }
+    } catch (error) {
+      new Notice(`Couldn't open the conflict: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  private async refreshState(): Promise<void> {
+    this.pluginData = await this.stateStore.load();
   }
 
   private async makeConnectContext(): Promise<

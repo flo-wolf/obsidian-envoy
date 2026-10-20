@@ -158,6 +158,7 @@ describe("plugin lifecycle", () => {
     expect(plugin.commands.map((command) => command.name)).toEqual([
       "Sync with GitLab",
       "Full audit and sync",
+      "Resolve sync conflicts",
       "Show GitLab sync status",
     ]);
     expect(plugin.intervals).toEqual([]);

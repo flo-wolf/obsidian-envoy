@@ -935,6 +935,20 @@ export class SyncManager {
     }
   }
 
+  /** A file version from GitLab by blob id (a conflict's base), or null if it can't be fetched. */
+  async readBlob(blobId: string): Promise<Uint8Array | null> {
+    try {
+      const data = await this.options.stateStore.load();
+      const settings = this.validateSettings(this.options.settings ?? data.settings);
+      const client = this.createClient(settings, await this.readToken(settings));
+      const buffer = await client.getRawBlob(blobId);
+      return buffer ? new Uint8Array(buffer) : null;
+    } catch (error) {
+      await this.options.logger?.warn("Could not fetch a conflict's base version", { message: errorMessage(error) });
+      return null;
+    }
+  }
+
   async listSyncableLocalFiles(): Promise<string[]> {
     if (!this.options.vault) {
       return [];
