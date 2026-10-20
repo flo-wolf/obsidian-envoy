@@ -94,10 +94,10 @@ describe("settings tab render", () => {
     const container = renderTab(fakePlugin());
     const token = container.rows.find((row: { name?: string }) => row.name === "GitLab token");
 
-    expect(token?.desc).toContain("Project: Read");
-    expect(token?.desc).toContain("Branch: Read");
-    expect(token?.desc).toContain("Repository: Read");
-    expect(token?.desc).toContain("Commit: Create");
+    expect(token?.desc).toContain("Project → Read");
+    expect(token?.desc).toContain("Branch → Read");
+    expect(token?.desc).toContain("Repository → Read");
+    expect(token?.desc).toContain("Commit → Create");
     expect(token?.desc).toContain("api scope");
   });
 

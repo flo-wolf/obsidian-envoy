@@ -47,10 +47,8 @@ export function vaultSetupViewState(state: LocalSyncState): VaultSetupViewState 
 export const TOKEN_HELP = [
   "Stored in Obsidian's secret storage on this device, never in the vault.",
   "Use a fine-grained token limited to this project, with these permissions:",
-  "• Project: Read",
-  "• Branch: Read",
-  "• Repository: Read",
-  "• Commit: Create",
+  "• Projects: Project → Read",
+  "• Repository: Branch → Read, Repository → Read, Commit → Create",
   "Without fine-grained tokens: a project access token with the Maintainer role and the api scope. write_repository alone isn't enough.",
 ].join("\n");
 

@@ -59,7 +59,9 @@ Four steps: create the repository and a token, connect the vault, turn on automa
    settings, under access tokens) or one for the project (**Project → Settings → Access tokens**):
 
    - **Access:** only the vault project.
-   - **Permissions:** **Project: Read**, **Branch: Read**, **Repository: Read**, **Commit: Create**.
+   - **Permissions**, as grouped in GitLab's token form:
+     - **Projects:** Project → **Read**
+     - **Repository:** Branch → **Read**, Repository → **Read**, Commit → **Create**
 
    That's all Envoy calls: the project itself, to see whether it's empty and which branch is the
    default (Project: Read); branches (Branch: Read); compare, the file tree, raw files and blobs,
