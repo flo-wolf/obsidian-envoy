@@ -108,6 +108,21 @@ describe("ConflictService", () => {
     expect(conflict).toMatchObject({ kind: "merge", hasBase: false });
   });
 
+  it("finds a conflict right after the sync, before Obsidian has indexed the copy", async () => {
+    // GitLab's version stayed at the path; this device's is in the new copy.
+    const setup = fixture({ [record.path]: "from GitLab", [record.copyPath]: "from this device" }, null);
+    setup.indexed.delete(record.copyPath);
+
+    expect(await setup.service.pending()).toEqual([record]);
+    expect(setup.data.state.conflicts).toEqual([record]);
+
+    const conflict = await setup.service.open(record);
+    await setup.service.keepSide(conflict!, "mine");
+    expect(setup.files.get(record.path)).toBe("from this device");
+    expect(setup.files.has(record.copyPath)).toBe(false);
+    expect(setup.data.state.conflicts).toEqual([]);
+  });
+
   it("forgets conflicts whose copy was deleted by hand", async () => {
     const setup = fixture({ "note.md": "theirs" }, null);
 
@@ -153,25 +168,36 @@ function fakeEnclave() {
 function fixture(initial: Record<string, string>, base: string | null) {
   const files = new Map(Object.entries(initial));
   const binary = new Set<string>();
+  // Files Obsidian's index knows; a file a sync just wrote is on disk but not here yet.
+  const indexed = new Set(files.keys());
   const data = { state: { conflicts: [record] } } as unknown as PluginData;
+  const pathOf = (file: never) => (file as unknown as { path: string }).path;
   const vault: ConflictVault = {
-    getFileByPath: (path) => (files.has(path) ? { path } : null),
-    readBinary: async (file) => {
-      const path = (file as unknown as { path: string }).path;
-      return binary.has(path)
-        ? new Uint8Array([0xff, 0xfe, 0x00]).buffer
-        : (new TextEncoder().encode(files.get(path)!).buffer as ArrayBuffer);
-    },
+    getFileByPath: (path) => (files.has(path) && indexed.has(path) ? { path } : null),
     modifyBinary: async (file, buffer) => {
-      files.set((file as unknown as { path: string }).path, new TextDecoder().decode(buffer));
+      files.set(pathOf(file), new TextDecoder().decode(buffer));
     },
     delete: async (file) => {
-      files.delete((file as unknown as { path: string }).path);
+      files.delete(pathOf(file));
+    },
+    adapter: {
+      exists: async (path) => files.has(path),
+      readBinary: async (path) =>
+        binary.has(path)
+          ? new Uint8Array([0xff, 0xfe, 0x00]).buffer
+          : (new TextEncoder().encode(files.get(path)!).buffer as ArrayBuffer),
+      writeBinary: async (path, buffer) => {
+        files.set(path, new TextDecoder().decode(buffer));
+      },
+      remove: async (path) => {
+        files.delete(path);
+      },
     },
   };
   const setup = {
     files,
     binary,
+    indexed,
     data,
     enclave: null as EnclaveApi | null,
     service: undefined as unknown as ConflictService,

@@ -16,12 +16,21 @@ import { isEnclaveLockedText } from "../enclave/locked-format";
 import { mergeChunks, type MergeChunk } from "../merge/merge-chunks";
 import type { ConflictRecord, PluginData } from "../sync/types";
 
-/** The vault operations the service needs (Obsidian's Vault provides them). */
+/**
+ * The vault operations the service needs (Obsidian's Vault provides them).
+ * Files are found on disk: a sync writes the conflict copy there, and
+ * Obsidian's file index only picks it up a moment later.
+ */
 export interface ConflictVault {
   getFileByPath(path: string): unknown;
-  readBinary(file: never): Promise<ArrayBuffer>;
   modifyBinary(file: never, data: ArrayBuffer): Promise<void>;
   delete(file: never): Promise<void>;
+  adapter: {
+    exists(path: string): Promise<boolean>;
+    readBinary(path: string): Promise<ArrayBuffer>;
+    writeBinary(path: string, data: ArrayBuffer): Promise<void>;
+    remove(path: string): Promise<void>;
+  };
 }
 
 export interface ConflictServiceOptions {
@@ -70,9 +79,12 @@ export class ConflictService {
   /** Open conflicts. Records whose note or copy no longer exists are dropped. */
   async pending(): Promise<ConflictRecord[]> {
     const records = (await this.options.stateStore.load()).state.conflicts ?? [];
-    const live = records.filter(
-      (record) => this.file(record.path) !== null && this.file(record.copyPath) !== null,
-    );
+    const live: ConflictRecord[] = [];
+    for (const record of records) {
+      if ((await this.exists(record.path)) && (await this.exists(record.copyPath))) {
+        live.push(record);
+      }
+    }
     if (live.length !== records.length) {
       await this.options.stateStore.update((data) => {
         data.state.conflicts = (data.state.conflicts ?? []).filter((record) => live.some((kept) => sameRecord(kept, record)));
@@ -187,14 +199,21 @@ export class ConflictService {
   }
 
   private async finish(record: ConflictRecord, bytes: Uint8Array): Promise<void> {
-    const note = this.file(record.path);
-    const copy = this.file(record.copyPath);
-    if (note === null) {
+    if (!(await this.exists(record.path))) {
       throw new Error(`"${record.path}" no longer exists.`);
     }
-    await this.options.vault.modifyBinary(note as never, toArrayBuffer(bytes));
+    // Through the vault when Obsidian knows the file, so an open editor updates right away.
+    const note = this.file(record.path);
+    if (note !== null) {
+      await this.options.vault.modifyBinary(note as never, toArrayBuffer(bytes));
+    } else {
+      await this.options.vault.adapter.writeBinary(record.path, toArrayBuffer(bytes));
+    }
+    const copy = this.file(record.copyPath);
     if (copy !== null) {
       await this.options.vault.delete(copy as never);
+    } else if (await this.exists(record.copyPath)) {
+      await this.options.vault.adapter.remove(record.copyPath);
     }
     await this.options.stateStore.update((data) => {
       data.state.conflicts = (data.state.conflicts ?? []).filter((other) => !sameRecord(other, record));
@@ -205,12 +224,15 @@ export class ConflictService {
     return this.options.vault.getFileByPath(path) ?? null;
   }
 
+  private async exists(path: string): Promise<boolean> {
+    return this.file(path) !== null || (await this.options.vault.adapter.exists(path));
+  }
+
   private async read(path: string): Promise<Uint8Array> {
-    const file = this.file(path);
-    if (file === null) {
+    if (!(await this.exists(path))) {
       throw new Error(`"${path}" no longer exists.`);
     }
-    return new Uint8Array(await this.options.vault.readBinary(file as never));
+    return new Uint8Array(await this.options.vault.adapter.readBinary(path));
   }
 }
 

@@ -1,2 +1,1 @@
-- **Sync now** at the top of the settings, once the vault is connected, with when this device last synced.
-- A shorter README about what Envoy does for you, with the full details in the [Envoy guide](https://github.com/flo-wolf/obsidian-envoy/blob/main/docs/guide.md).
+Fixes conflicts not opening: right after a sync created a conflict, the conflict window said "No sync conflicts to resolve" and forgot the conflict, because Obsidian hadn't listed the new conflict copy yet. Envoy now looks for the files on disk.
