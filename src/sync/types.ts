@@ -59,6 +59,11 @@ export interface LocalSyncState {
   pendingTransaction: PendingTransaction | null;
   lastSyncAt: number | null;
   lastSyncResult: "never" | "success" | "conflict" | "error";
+  /**
+   * Notes whose remote change hasn't been applied because the note was held back
+   * (open in plain text here). Looked at again on every sync until applied.
+   */
+  deferredPaths?: string[];
 }
 
 export interface PluginData {

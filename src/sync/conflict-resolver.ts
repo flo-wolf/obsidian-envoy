@@ -1,3 +1,4 @@
+import { isEnclaveLocked } from "../enclave/locked-format";
 import type { GitLabCommitAction } from "../gitlab/types";
 import type { LocalSnapshotEntry, VersionState } from "./local-snapshot";
 import type { ConflictStrategy, MaterializeOperation, TrackedFile } from "./types";
@@ -380,6 +381,12 @@ function conflictCopyBytes(
     return copy.bytes;
   }
 
+  // A locked note's copy must stay a locked note Enclave can open, not a report
+  // wrapping its encrypted text.
+  if (isEnclaveLocked(path, copy.bytes) || isEnclaveLocked(path, original.bytes)) {
+    return copy.bytes;
+  }
+
   return new TextEncoder().encode(conflictReport(path, copy, original, keptSide, deviceName));
 }
 
@@ -527,6 +534,12 @@ function autoMergeText(
     !isProbablyText(path, local.bytes) ||
     !isProbablyText(path, remote.bytes)
   ) {
+    return null;
+  }
+
+  // Encrypted text can't be merged line by line; a locked note is a whole, and
+  // only Enclave can merge its contents (in the conflict window).
+  if ([base, local, remote].some((version) => isEnclaveLocked(path, version.bytes))) {
     return null;
   }
 

@@ -10,6 +10,9 @@ import type {
   PluginData,
 } from "../../src/sync/types";
 import { GitLabTestServer } from "../helpers/gitlab-test-server";
+import { UploadGuard } from "../../src/enclave/upload-guard";
+import type { EnclaveApi } from "../../src/enclave/enclave-api";
+import { isEnclaveLockedText } from "../../src/enclave/locked-format";
 
 const requestUrlMock = vi.hoisted(() => vi.fn());
 const conflictNow = new Date("2026-07-26T20:15:00+03:00");
@@ -264,6 +267,198 @@ describe("GitLab sync integration", () => {
     await expectNoMetadata(setup);
   }, 20_000);
 });
+
+describe("Enclave: plain text never leaves the device", () => {
+  beforeEach(() => {
+    requestUrlMock.mockReset();
+  });
+
+  it("holds back an unlocked note and uploads it once it's locked", async () => {
+    const setup = await initializedFixture({ "diary.md": lockedNote("v1") });
+    const enclave = new FakeEnclave(setup);
+    await enclave.unlock("diary.md", "SECRET diary text", lockedNote("v2"));
+    await setup.writeDirty("todo.md", "ordinary note");
+
+    const first = await setup.manager({ uploadGuard: enclave.guard() }).sync("manual");
+
+    expect(first.held).toEqual([{ path: "diary.md", reason: "unlocked" }]);
+    expect(setup.server.fileText("todo.md")).toBe("ordinary note");
+    expect(setup.server.fileText("diary.md")).toBe(lockedNote("v1"));
+
+    await enclave.lock("diary.md");
+    const second = await setup.manager({ uploadGuard: enclave.guard() }).sync("manual");
+
+    expect(second.held).toEqual([]);
+    expect(setup.server.fileText("diary.md")).toBe(lockedNote("v2"));
+    expectNoPlainTextUploaded(setup, ["SECRET diary text"]);
+  });
+
+  it("holds back a locked note turned plain even without Enclave", async () => {
+    const setup = await initializedFixture({ "diary.md": lockedNote("v1") });
+    await setup.writeDirty("diary.md", "SECRET left unlocked");
+
+    const result = await setup.manager().sync("manual");
+
+    expect(result.held).toEqual([{ path: "diary.md", reason: "locked-turned-plain" }]);
+    expect(setup.server.fileText("diary.md")).toBe(lockedNote("v1"));
+    expectNoPlainTextUploaded(setup, ["SECRET left unlocked"]);
+  });
+
+  it("uploads a note Enclave says was made plain on purpose", async () => {
+    const setup = await initializedFixture({ "diary.md": lockedNote("v1") });
+    const enclave = new FakeEnclave(setup);
+    enclave.plain.add("diary.md");
+    await setup.writeDirty("diary.md", "decrypted for good");
+
+    const result = await setup.manager({ uploadGuard: enclave.guard() }).sync("manual");
+
+    expect(result.held).toEqual([]);
+    expect(setup.server.fileText("diary.md")).toBe("decrypted for good");
+  });
+
+  it("leaves a note that's waiting to be locked in a locked folder out of the commit", async () => {
+    const setup = await initializedFixture({ "private/old.md": lockedNote("old") });
+    const enclave = new FakeEnclave(setup);
+    enclave.notLockedYet.add("private/new.md");
+    await setup.writeDirty("private/new.md", "SECRET fresh draft");
+
+    const result = await setup.manager({ uploadGuard: enclave.guard() }).sync("manual");
+
+    expect(result.held).toEqual([{ path: "private/new.md", reason: "not-locked-yet" }]);
+    expect(setup.server.fileText("private/new.md")).toBeNull();
+    expectNoPlainTextUploaded(setup, ["SECRET fresh draft"]);
+  });
+
+  it("doesn't overwrite an unlocked note with a remote change, and applies it once locked unchanged", async () => {
+    const setup = await initializedFixture({ "diary.md": lockedNote("v1") });
+    const enclave = new FakeEnclave(setup);
+    // Locking unchanged restores the exact earlier version, as Enclave does.
+    await enclave.unlock("diary.md", "SECRET diary text", lockedNote("v1"));
+    await setup.server.desktopCommit({ "diary.md": lockedNote("from another device") });
+
+    const first = await setup.manager({ uploadGuard: enclave.guard() }).sync("manual");
+
+    expect(first.held).toEqual([{ path: "diary.md", reason: "unlocked" }]);
+    expect(setup.vault.text("diary.md")).toBe("SECRET diary text");
+    expect((await setup.store.load()).state.deferredPaths).toEqual(["diary.md"]);
+
+    await enclave.lock("diary.md");
+    const second = await setup.manager({ uploadGuard: enclave.guard() }).sync("manual");
+
+    expect(second.status).toBe("success");
+    expect(setup.vault.text("diary.md")).toBe(lockedNote("from another device"));
+    expect(setup.server.fileText("diary.md")).toBe(lockedNote("from another device"));
+    expect((await setup.store.load()).state.deferredPaths).toEqual([]);
+    expectNoPlainTextUploaded(setup, ["SECRET diary text"]);
+  });
+
+  it("keeps both versions of a locked note changed on two devices, each still locked", async () => {
+    const setup = await initializedFixture({ "diary.md": lockedNote("v1") });
+    const enclave = new FakeEnclave(setup);
+    await enclave.unlock("diary.md", "SECRET edited here", lockedNote("edited here"));
+    await setup.server.desktopCommit({ "diary.md": lockedNote("edited elsewhere") });
+    await setup.manager({ uploadGuard: enclave.guard() }).sync("manual");
+
+    await enclave.lock("diary.md");
+    const result = await setup.manager({ uploadGuard: enclave.guard() }).sync("manual");
+
+    expect(result.status).toBe("conflict");
+    const copy = setup.server.paths().find((path) => path.startsWith("diary — conflict"));
+    expect(copy).toBeDefined();
+    const versions = [setup.server.fileText("diary.md"), setup.server.fileText(copy!)];
+    expect(versions.sort()).toEqual([lockedNote("edited elsewhere"), lockedNote("edited here")].sort());
+    expectNoPlainTextUploaded(setup, ["SECRET edited here"]);
+  });
+
+  it("can lock everything first, so nothing needs holding back", async () => {
+    const setup = await initializedFixture({ "diary.md": lockedNote("v1") });
+    const enclave = new FakeEnclave(setup);
+    await enclave.unlock("diary.md", "SECRET diary text", lockedNote("v2"));
+
+    const result = await setup
+      .manager({ uploadGuard: enclave.guard(), lockBeforeSync: (trigger) => trigger === "manual" })
+      .sync("manual");
+
+    expect(result.held).toEqual([]);
+    expect(setup.server.fileText("diary.md")).toBe(lockedNote("v2"));
+    expectNoPlainTextUploaded(setup, ["SECRET diary text"]);
+  });
+});
+
+/** A note as Enclave locks it; `tag` stands in for the encrypted content. */
+function lockedNote(tag: string): string {
+  const payload = {
+    v: 1,
+    alg: "AES-GCM",
+    kdf: "PBKDF2",
+    hash: "SHA-256",
+    iterations: 310000,
+    salt: "c2FsdA==",
+    iv: "aXZpdmk=",
+    ct: Buffer.from(tag).toString("base64"),
+    scope: "vault",
+  };
+  return ["---", "locked: true", "lock-scope: vault", "---", "```enclave", JSON.stringify(payload), "```", ""].join("\n");
+}
+
+/** Stands in for Enclave: unlocking writes plain text, locking writes the locked version back. */
+class FakeEnclave {
+  readonly unlocked = new Map<string, string>();
+  readonly notLockedYet = new Set<string>();
+  readonly plain = new Set<string>();
+
+  constructor(private readonly setup: Fixture) {}
+
+  /** Unlock `path`: `plain` goes to disk; `lockedAgain` is what locking writes back. */
+  async unlock(path: string, plain: string, lockedAgain: string): Promise<void> {
+    this.unlocked.set(path, lockedAgain);
+    await this.setup.writeDirty(path, plain);
+  }
+
+  async lock(path: string): Promise<void> {
+    const locked = this.unlocked.get(path);
+    if (locked === undefined) {
+      throw new Error(`${path} isn't unlocked`);
+    }
+    this.unlocked.delete(path);
+    await this.setup.writeDirty(path, locked);
+  }
+
+  api(): EnclaveApi {
+    return {
+      version: 1,
+      ready: async () => undefined,
+      holdReason: async (path) =>
+        this.unlocked.has(path) ? "unlocked" : this.notLockedYet.has(path) ? "not-locked-yet" : null,
+      isLockedContent: (content) => isEnclaveLockedText(content),
+      isIntentionallyPlain: (path) => this.plain.has(path),
+      lockAll: async () => {
+        for (const path of [...this.unlocked.keys()]) {
+          await this.lock(path);
+        }
+        return 0;
+      },
+      onLocked: () => () => undefined,
+      openForMerge: async () => null,
+    };
+  }
+
+  guard(): UploadGuard {
+    return new UploadGuard(() => ({ state: "ready", api: this.api() }));
+  }
+}
+
+/** Fails if any commit sent to GitLab contains one of `secrets`. */
+function expectNoPlainTextUploaded(setup: Fixture, secrets: string[]): void {
+  const uploaded = setup.server.commitActions
+    .flat()
+    .map((action) => ("content" in action && action.content ? Buffer.from(action.content, "base64").toString("utf8") : ""));
+  for (const secret of secrets) {
+    expect(uploaded.filter((text) => text.includes(secret))).toEqual([]);
+  }
+}
+
+type Fixture = Awaited<ReturnType<typeof initializedFixture>>;
 
 async function initializedFixture(initialRemoteFiles: Record<string, string | Uint8Array | ArrayBuffer>) {
   const server = await GitLabTestServer.create(initialRemoteFiles);

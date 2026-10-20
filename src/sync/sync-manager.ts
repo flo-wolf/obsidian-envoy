@@ -1,5 +1,6 @@
 import { normalizePath, Platform, type App, type Plugin, type Vault } from "obsidian";
 import { commitDeviceLabel, deviceLabel, type DevicePlatform } from "../device-label";
+import { UploadGuard, type HeldNote, type HoldReason, type UploadGuardLike } from "../enclave/upload-guard";
 import { GitLabClient } from "../gitlab/client";
 import type {
   CreatedGitLabCommit,
@@ -32,6 +33,8 @@ export interface SyncResult {
   commitSha?: string;
   recovered?: boolean;
   attempts?: number;
+  /** Notes not uploaded this time because their plain text must not leave the device. */
+  held?: HeldNote[];
 }
 
 export type SyncTrigger =
@@ -149,6 +152,10 @@ export interface SyncManagerOptions {
   createProgressNotice?: (message: string) => ProgressNotice;
   /** Overrides Obsidian's `Platform` so device naming can be exercised in tests. */
   platform?: DevicePlatform;
+  /** Decides which notes must not be uploaded (see enclave/upload-guard.ts). */
+  uploadGuard?: UploadGuardLike;
+  /** Whether to have Enclave lock every unlocked note before a sync with this trigger. */
+  lockBeforeSync?: (trigger: SyncTrigger) => boolean;
 }
 
 const MAX_PLAN_ATTEMPTS = 2;
@@ -279,9 +286,16 @@ export class SyncManager {
         throw new Error("Vault is required to initialize the repository.");
       }
       const vault = this.options.vault;
+      const guard = this.uploadGuard();
+      await guard.prepare();
       const actions: GitLabCommitAction[] = [];
       for (const path of paths) {
         const bytes = new Uint8Array(await vault.adapter.readBinary(path));
+        // Held notes stay out of the first commit; once they're locked, the next
+        // sync picks them up as local changes.
+        if (await guard.holdLocal({ path, local: { exists: true, bytes }, base: null })) {
+          continue;
+        }
         actions.push({
           action: "create",
           file_path: path,
@@ -357,6 +371,13 @@ export class SyncManager {
       const firstBranch = await client.getBranch();
       this.validateBranch(firstBranch);
 
+      const guard = this.uploadGuard();
+      await guard.prepare();
+      if (this.options.lockBeforeSync?.(trigger)) {
+        this.setProgress(progress, "Locking notes…");
+        await guard.enclave()?.lockAll();
+      }
+
       if (trigger === "audit") {
         await this.auditLocalChanges();
       }
@@ -366,10 +387,11 @@ export class SyncManager {
         trigger,
         settings,
         client,
+        guard,
         firstRemoteSha: firstBranch.commit.id,
         progress,
       });
-      this.options.notice?.("Sync complete");
+      this.options.notice?.(completionMessage(result.held ?? []));
       return result;
     } catch (error) {
       const message = errorMessage(error);
@@ -389,6 +411,7 @@ export class SyncManager {
     trigger: SyncTrigger;
     settings: GitLabSyncSettings;
     client: GitLabClientLike;
+    guard: UploadGuardLike;
     firstRemoteSha: string;
     progress?: ProgressNotice;
   }): Promise<SyncResult> {
@@ -420,7 +443,25 @@ export class SyncManager {
       const snapshotService = this.createLocalSnapshotService(input.client, ignoreMatcher);
 
       this.setProgress(input.progress, "Saving local changes…");
-      const localSnapshots = await snapshotService.snapshot(dirtyEntries, trackedFiles);
+      const holds = await this.applyHolds(
+        input.guard,
+        await snapshotService.snapshot(dirtyEntries, trackedFiles),
+        remote.changes,
+        data.state.deferredPaths ?? [],
+      );
+      if (remote.remoteTree) {
+        // The full-tree fallback indexes the remote head; deferred notes must keep
+        // their last synced base so their remote change is still seen as one later.
+        for (const path of holds.deferred) {
+          if (data.state.trackedFiles[path]) {
+            trackedFiles[path] = data.state.trackedFiles[path];
+          } else {
+            delete trackedFiles[path];
+          }
+        }
+      }
+      await this.rememberDeferred(holds.deferred);
+
       this.setProgress(input.progress, "Resolving conflicts…");
       const planner = this.createPlanner(input.client, input.settings);
       const plan = await planner.plan({
@@ -428,13 +469,16 @@ export class SyncManager {
         remoteSha,
         trackedFiles,
         dirtyEntries,
-        remoteChanges: remote.changes,
-        localSnapshots,
+        remoteChanges: holds.changes,
+        localSnapshots: holds.snapshots,
         now: this.nowDate(),
       });
 
       if (plan.actions.length === 0) {
-        return await this.applyRemoteOnlyPlan(input.trigger, remoteSha, plan, input.progress);
+        return {
+          ...(await this.applyRemoteOnlyPlan(input.trigger, remoteSha, plan, holds.deferred, input.progress)),
+          held: holds.held,
+        };
       }
 
       const branchBeforeCommit = await input.client.getBranch();
@@ -459,13 +503,15 @@ export class SyncManager {
         baseSha,
         createdCommit,
         plan,
+        holds,
       );
+      await this.rememberDeferred(holds.deferred);
       const transaction = this.pendingTransaction(createdCommit.id, finalizedPlan);
       await this.persistPendingTransaction(transaction);
 
       this.setProgress(input.progress, "Updating local vault…");
       await this.getMaterializer().apply(transaction.materializeOperations);
-      await this.finalizeTransaction(transaction);
+      await this.finalizeTransaction(transaction, holds.deferred);
       this.setProgress(input.progress, "Sync complete");
 
       return {
@@ -474,6 +520,7 @@ export class SyncManager {
         message: "Sync complete",
         commitSha: createdCommit.id,
         attempts: attempt,
+        held: holds.held,
       };
     }
 
@@ -486,6 +533,7 @@ export class SyncManager {
     baseSha: string,
     createdCommit: CreatedGitLabCommit,
     plan: SyncPlan,
+    holds: Holds,
   ): Promise<SyncPlan> {
     if (createdCommit.parent_ids.includes(plan.basedOnRemoteSha)) {
       return plan;
@@ -506,13 +554,23 @@ export class SyncManager {
       return plan;
     }
 
+    const remoteChanges: RemoteChange[] = [];
+    for (const change of actual.changes) {
+      const paths = changePaths(change);
+      if (await this.firstHeld(holds, paths, (path) => holds.guard.holdRemote(path))) {
+        holds.deferred = unique([...holds.deferred, ...paths]);
+      } else {
+        remoteChanges.push(change);
+      }
+    }
+
     const planner = this.createPlanner(client, settings);
     return await planner.plan({
       baseSha,
       remoteSha: createdCommit.id,
       trackedFiles: plan.nextTrackedFiles,
       dirtyEntries: [],
-      remoteChanges: actual.changes,
+      remoteChanges,
       localSnapshots: [],
       now: this.nowDate(),
     });
@@ -522,6 +580,7 @@ export class SyncManager {
     trigger: SyncTrigger,
     remoteSha: string,
     plan: SyncPlan,
+    deferredPaths: string[],
     progress?: ProgressNotice,
   ): Promise<SyncResult> {
     this.setProgress(progress, "Updating local vault…");
@@ -535,6 +594,7 @@ export class SyncManager {
         delete data.state.dirtyEntries[normalizePath(path)];
       }
       data.state.pendingTransaction = null;
+      data.state.deferredPaths = [...deferredPaths];
       data.state.lastSyncAt = this.now();
       data.state.lastSyncResult = plan.conflictPaths.length > 0 ? "conflict" : "success";
     });
@@ -569,7 +629,7 @@ export class SyncManager {
     });
   }
 
-  private async finalizeTransaction(transaction: PendingTransaction): Promise<void> {
+  private async finalizeTransaction(transaction: PendingTransaction, deferredPaths: string[]): Promise<void> {
     await this.options.stateStore.update((data) => {
       data.state.lastSyncedCommitSha = transaction.committedSha;
       data.state.trackedFiles = cloneTrackedFiles(transaction.nextTrackedFiles);
@@ -577,9 +637,99 @@ export class SyncManager {
         delete data.state.dirtyEntries[normalizePath(path)];
       }
       data.state.pendingTransaction = null;
+      data.state.deferredPaths = [...deferredPaths];
       data.state.lastSyncAt = this.now();
       data.state.lastSyncResult = transaction.conflictPaths.length > 0 ? "conflict" : "success";
     });
+  }
+
+  /**
+   * Take the notes that must not be uploaded out of this sync. Their local
+   * versions aren't uploaded (they stay dirty, so they go out once they're safe),
+   * and remote changes to them wait as "deferred": not applied, and the note
+   * keeps its last synced base, so the change is still seen when the note can be
+   * compared safely. A deferred note whose hold has cleared gets its remote
+   * change looked at again now.
+   */
+  private async applyHolds(
+    guard: UploadGuardLike,
+    snapshots: LocalSnapshotEntry[],
+    changes: RemoteChange[],
+    deferredBefore: string[],
+  ): Promise<Holds> {
+    const holds: Holds = { guard, reasons: new Map(), snapshots: [], changes: [], held: [], deferred: [] };
+
+    for (const snapshot of snapshots) {
+      const reason = await guard.holdLocal(snapshot);
+      if (reason) {
+        holds.reasons.set(snapshot.path, reason);
+      } else {
+        holds.snapshots.push(snapshot);
+      }
+    }
+
+    const remotePaths = new Set(changes.flatMap(changePaths));
+    for (const change of changes) {
+      const paths = changePaths(change);
+      if (await this.firstHeld(holds, paths, (path) => guard.holdRemote(path))) {
+        holds.deferred.push(...paths);
+      } else {
+        holds.changes.push(change);
+      }
+    }
+
+    for (const path of deferredBefore) {
+      if (await this.firstHeld(holds, [path], (candidate) => guard.holdRemote(candidate))) {
+        holds.deferred.push(path);
+      } else if (!remotePaths.has(path)) {
+        holds.changes.push({ type: "update", path });
+      }
+    }
+
+    holds.deferred = unique(holds.deferred);
+    // A local change to a deferred note waits with its remote change, so both are compared together.
+    holds.snapshots = holds.snapshots.filter((snapshot) => !holds.deferred.includes(snapshot.path));
+    holds.held = [...holds.reasons]
+      .map(([path, reason]) => ({ path, reason }))
+      .sort((left, right) => left.path.localeCompare(right.path));
+    return holds;
+  }
+
+  /** Whether any of `paths` is held, asking `check` for paths not decided yet (and remembering the answer). */
+  private async firstHeld(
+    holds: Holds,
+    paths: string[],
+    check: (path: string) => Promise<HoldReason | null>,
+  ): Promise<boolean> {
+    let held = false;
+    for (const path of paths) {
+      if (!holds.reasons.has(path)) {
+        const reason = await check(path);
+        if (reason) {
+          holds.reasons.set(path, reason);
+        }
+      }
+      held = held || holds.reasons.has(path);
+    }
+    return held;
+  }
+
+  /**
+   * Save newly deferred notes before anything is committed. Only ever adds, so
+   * an interrupted sync can't forget a remote change; finishing a sync stores
+   * the exact list.
+   */
+  private async rememberDeferred(deferred: string[]): Promise<void> {
+    if (deferred.length === 0) {
+      return;
+    }
+    await this.options.stateStore.update((data) => {
+      data.state.deferredPaths = unique([...(data.state.deferredPaths ?? []), ...deferred]);
+    });
+  }
+
+  private uploadGuard(): UploadGuardLike {
+    return this.options.uploadGuard ?? UploadGuard.forApp(this.options.app);
   }
 
   private filteredDirtyEntries(
@@ -874,6 +1024,38 @@ export class SyncManager {
       normalized.startsWith(runtimeDir)
     );
   }
+}
+
+/** What applyHolds() decided for one sync. */
+interface Holds {
+  guard: UploadGuardLike;
+  reasons: Map<string, HoldReason>;
+  /** Local changes that may be uploaded. */
+  snapshots: LocalSnapshotEntry[];
+  /** Remote changes that may be applied, including re-checks of earlier deferred notes. */
+  changes: RemoteChange[];
+  /** Held notes, for the sync result. */
+  held: HeldNote[];
+  /** Notes whose remote change waits until they can be compared safely. */
+  deferred: string[];
+}
+
+function changePaths(change: RemoteChange): string[] {
+  return change.type === "rename" ? [change.oldPath, change.newPath] : [change.path];
+}
+
+function unique(paths: string[]): string[] {
+  return [...new Set(paths)];
+}
+
+/** "Sync complete", plus how many notes were held back. */
+function completionMessage(held: HeldNote[]): string {
+  if (held.length === 0) {
+    return "Sync complete";
+  }
+  return held.length === 1
+    ? "Sync complete. 1 note was held back until it's locked."
+    : `Sync complete. ${held.length} notes were held back until they're locked.`;
 }
 
 function isRemoteDiffClient(client: GitLabClientLike): client is GitLabClientLike & RemoteDiffClient {

@@ -5,6 +5,8 @@ import type { DirtyEntry, GitLabSyncSettings, LocalSyncState, MaterializeOperati
 import type { RemoteChange } from "../../src/sync/remote-diff";
 import type { SyncPlan } from "../../src/sync/sync-planner";
 import type { DevicePlatform } from "../../src/device-label";
+import { UploadGuard, type UploadGuardLike } from "../../src/enclave/upload-guard";
+import type { EnclaveApi } from "../../src/enclave/enclave-api";
 
 const settings: GitLabSyncSettings = {
   gitlabBaseUrl: "https://gitlab.com",
@@ -338,6 +340,47 @@ describe("SyncManager", () => {
     expect(state.lastSyncedCommitSha).toBe("seed-sha");
   });
 
+  it("leaves notes Enclave holds out of the first commit of an empty remote", async () => {
+    const enclave = {
+      version: 1,
+      ready: async () => undefined,
+      holdReason: async (path: string) => (path === "diary.md" ? "unlocked" : null),
+      isIntentionallyPlain: () => false,
+    } as unknown as EnclaveApi;
+    const fixture = managerFixture({
+      data: pluginData({ initialized: false }),
+      branchHeads: ["seed-sha"],
+      localFiles: { "alpha.md": "alpha", "diary.md": "SECRET plain text" },
+      uploadGuard: new UploadGuard(() => ({ state: "ready", api: enclave })),
+    });
+    fixture.gitlab.createCommit.mockResolvedValueOnce(commit("seed-sha", []));
+
+    const result = await fixture.manager.initializeEmptyRemote();
+
+    expect(result.status).toBe("success");
+    expect(fixture.gitlab.createCommit).toHaveBeenCalledWith({
+      message: "Initialize vault",
+      actions: [{ action: "create", file_path: "alpha.md", content: base64("alpha"), encoding: "base64" }],
+    });
+  });
+
+  it("doesn't sync at all while Enclave is enabled but not available", async () => {
+    const fixture = managerFixture({
+      data: initializedData(),
+      uploadGuard: new UploadGuard(() => ({ state: "unavailable", reason: "Enclave is enabled but hasn't finished loading" }), {
+        waitMs: 500,
+        sleep: async () => undefined,
+      }),
+    });
+
+    const result = await fixture.manager.sync("startup");
+
+    expect(result.status).toBe("error");
+    expect(result.message).toMatch(/Not syncing, so no unlocked note can be uploaded/);
+    expect(fixture.gitlab.createCommit).not.toHaveBeenCalled();
+    expect(fixture.planner.plan).not.toHaveBeenCalled();
+  });
+
   it("refuses to seed an empty remote without a commit author", async () => {
     const fixture = managerFixture({
       data: pluginData({ initialized: false }),
@@ -376,6 +419,7 @@ function managerFixture(options: {
   remoteTree?: any[];
   localFiles?: Record<string, string>;
   platform?: DevicePlatform;
+  uploadGuard?: UploadGuardLike;
 }) {
   const data = options.settings
     ? { ...options.data, settings: options.settings }
@@ -478,6 +522,7 @@ function managerFixture(options: {
       nowDate: () => new Date("2026-07-26T20:15:00+03:00"),
       notice: (message) => notices.push(message),
       platform: options.platform ?? { isMacOS: true },
+      uploadGuard: options.uploadGuard,
     }),
     notices,
   };
