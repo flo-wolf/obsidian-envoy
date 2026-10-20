@@ -91,6 +91,7 @@ function fakeVault(initialFiles: Record<string, Uint8Array> = {}) {
       return { files: [...localFiles], folders: [...localFolders] };
     }),
     exists: vi.fn(async (path: string) => files.has(path) || folders.has(path)),
+    read: vi.fn(async (path: string) => new TextDecoder().decode(files.get(path))),
     mkdir: vi.fn(async (path: string) => {
       calls.push(["mkdir", path]);
       folders.add(path);
@@ -282,6 +283,24 @@ describe("BootstrapService", () => {
       expect(preview.conflictCount).toBe(1);
       expect(preview.localPushPaths).toEqual(["Welcome.md"]);
       expect(preview.localPushCount).toBe(2);
+    });
+
+    it("leaves out files that sync won't push: .gitignore matches and Envoy's log", async () => {
+      const setup = await fixture({
+        localFiles: {
+          ".gitignore": bytes(".DS_Store\n.trash/\n"),
+          ".DS_Store": bytes("x"),
+          ".obsidian/.DS_Store": bytes("x"),
+          ".obsidian/app.json": bytes("{}"),
+          ".obsidian/envoy.log": bytes("log"),
+          ".trash/old.md": bytes("old"),
+          "note.md": bytes("note"),
+        },
+        tree: [],
+      });
+      const preview = await setup.service.preview();
+      if (preview.mode !== "merge") throw new Error("expected merge preview");
+      expect(preview.localPushPaths).toEqual([".gitignore", ".obsidian/app.json", "note.md"]);
     });
   });
 

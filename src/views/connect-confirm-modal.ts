@@ -1,4 +1,4 @@
-import { ButtonComponent, Modal, Notice, Setting } from "obsidian";
+import { type App, ButtonComponent, Modal, Notice, Setting } from "obsidian";
 import type { ConnectPreview, ConnectMergePreview, ConnectSeedPreview } from "../sync/bootstrap-service";
 
 const MAX_NAMES = 10;
@@ -9,7 +9,7 @@ export class ConnectConfirmModal extends Modal {
   private confirmButton: ButtonComponent | null = null;
 
   constructor(
-    app: any,
+    app: App,
     private readonly projectPath: string,
     private readonly branch: string,
     private readonly preview: ConnectPreview,
@@ -45,20 +45,20 @@ export class ConnectConfirmModal extends Modal {
       text: `Repository (${this.projectPath} · branch ${this.branch}):`,
     });
     this.contentEl.createEl("p", {
-      text: `${preview.remoteFileCount} files will be downloaded to this vault.`,
+      text: `${files(preview.remoteFileCount)} will be downloaded to this vault.`,
     });
 
     this.contentEl.createEl("p", { text: "This vault:" });
     if (preview.localPushCount === 0) {
-      this.contentEl.createEl("p", { text: "0 files to push." });
+      this.contentEl.createEl("p", { text: "No files to push." });
     } else {
       this.contentEl.createEl("p", {
-        text: `${preview.localPushCount} local files will be pushed to GitLab on the next sync, e.g.:`,
+        text: `${files(preview.localPushCount)} will be pushed to GitLab on the next sync, e.g.:`,
       });
       this.renderPathList(preview.localPushPaths, preview.localPushCount);
     }
     this.contentEl.createEl("p", {
-      text: `${preview.conflictCount} files changed on both sides.`,
+      text: `${files(preview.conflictCount)} changed on both sides.`,
     });
     this.contentEl.createEl("p", {
       text: "Nothing is deleted. When the same file differs on both sides, both versions are kept.",
@@ -68,7 +68,7 @@ export class ConnectConfirmModal extends Modal {
   private renderSeed(preview: ConnectSeedPreview): void {
     this.contentEl.createEl("p", { text: "The repository is empty." });
     this.contentEl.createEl("p", {
-      text: `${preview.localPushCount} files will be pushed to GitLab as the first commit on branch "${preview.branch}", e.g.:`,
+      text: `${files(preview.localPushCount)} will be pushed to GitLab as the first commit on branch "${preview.branch}", e.g.:`,
     });
     this.renderPathList(preview.localPushPaths, preview.localPushCount);
     this.contentEl.createEl("p", { text: "Nothing is downloaded and nothing is deleted." });
@@ -98,4 +98,8 @@ export class ConnectConfirmModal extends Modal {
       this.close();
     }
   }
+}
+
+function files(count: number): string {
+  return count === 1 ? "1 file" : `${count} files`;
 }

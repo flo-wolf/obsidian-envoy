@@ -1,1 +1,1 @@
-The token permissions in the settings are grouped as in GitLab's token form: Projects: Project → Read; Repository: Branch → Read, Repository → Read, Commit → Create.
+The connect preview now lists only the files sync will really push: it applies the vault's .gitignore and leaves out Envoy's own log, like sync already did. Counts read "1 file" instead of "1 files".

@@ -1,6 +1,7 @@
 import { normalizePath } from "obsidian";
 import { BlobReader, type Entry, Uint8ArrayWriter, ZipReader } from "@zip.js/zip.js";
 import { calculateGitBlobId } from "./conflict-resolver";
+import { IgnoreMatcher } from "./ignore-matcher";
 import type { GitLabClient } from "../gitlab/client";
 import type { GitLabBranch, GitLabTreeItem } from "../gitlab/types";
 import type { TrackedFile } from "./types";
@@ -13,6 +14,7 @@ interface BootstrapVault {
   adapter: {
     list(path: string): Promise<{ files: string[]; folders: string[] }>;
     exists(path: string): Promise<boolean>;
+    read(path: string): Promise<string>;
     mkdir(path: string): Promise<void>;
     writeBinary(path: string, data: ArrayBuffer): Promise<void>;
     readBinary(path: string): Promise<ArrayBuffer>;
@@ -114,11 +116,15 @@ export class BootstrapService {
       await this.options.client.getTree(commitSha),
       (path) => this.isHardExcluded(path),
     );
-    const localPaths = await this.listLocalFiles("");
+    // Same rules as sync, so the preview lists only what will really be pushed.
+    const ignoreMatcher = new IgnoreMatcher(this.options.vault, this.pluginId);
+    await ignoreMatcher.reload();
+    const localPaths = await this.listLocalFiles("", ignoreMatcher);
 
     const localPushPaths: string[] = [];
     let conflictCount = 0;
     for (const path of localPaths) {
+      if (ignoreMatcher.isIgnored(path, remoteIndex)) continue;
       const remote = remoteIndex[path];
       if (!remote) {
         localPushPaths.push(path);
@@ -140,7 +146,7 @@ export class BootstrapService {
     };
   }
 
-  private async listLocalFiles(dir: string): Promise<string[]> {
+  private async listLocalFiles(dir: string, ignoreMatcher: IgnoreMatcher): Promise<string[]> {
     const { files, folders } = await this.options.vault.adapter.list(dir);
     const out: string[] = [];
     for (const file of files) {
@@ -149,8 +155,8 @@ export class BootstrapService {
     }
     for (const folder of folders) {
       const normalized = normalizePath(folder);
-      if (this.isHardExcluded(normalized)) continue;
-      out.push(...(await this.listLocalFiles(normalized)));
+      if (this.isHardExcluded(normalized) || ignoreMatcher.isDirIgnored(normalized)) continue;
+      out.push(...(await this.listLocalFiles(normalized, ignoreMatcher)));
     }
     return out;
   }
@@ -244,7 +250,7 @@ export class BootstrapService {
       return true;
     }
 
-    const external = candidate.externalFileAttribute ?? candidate.externalFileAttributes;
+    const external = candidate.externalFileAttributes;
     if (typeof external === "number" && ((external >>> 16) & 0o170000) === 0o120000) {
       return true;
     }

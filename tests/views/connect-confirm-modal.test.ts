@@ -18,7 +18,7 @@ describe("ConnectConfirmModal", () => {
     modal.onOpen();
     const text = modal.contentEl.textContent ?? "";
     expect(text).toContain("128 files will be downloaded");
-    expect(text).toContain("12 local files will be pushed");
+    expect(text).toContain("12 files will be pushed");
     expect(text).toContain("and 2 more");
   });
 
@@ -26,7 +26,7 @@ describe("ConnectConfirmModal", () => {
     const preview = { mode: "merge" as const, remoteFileCount: 5, localPushCount: 0, conflictCount: 0, localPushPaths: [] };
     const modal = new ConnectConfirmModal(makeApp(), "g/p", "main", preview, vi.fn());
     modal.onOpen();
-    expect(modal.contentEl.textContent ?? "").toContain("0 files to push");
+    expect(modal.contentEl.textContent ?? "").toContain("No files to push");
   });
 
   it("invokes the callback when Connect is clicked", () => {
