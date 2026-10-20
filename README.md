@@ -1,15 +1,17 @@
 # Courier
 
-> Courier is a fork of [GitLab Gitless Sync](https://github.com/TerekhinAO/obsidian-gitlab-sync)
-> by Alexander Terekhin, itself based on GitHub Gitless Sync by Silvano Cerza.
-> It adds support for [Enclave](https://github.com/flo-wolf/obsidian-enclave): notes
-> Enclave encrypts are only ever uploaded locked. Licensed AGPL-3.0, like the original.
+**Sync an Obsidian vault with a GitLab repository, on desktop and mobile, without Git on the device.**
 
-Sync an Obsidian vault with a GitLab repository **without requiring Git on the device**.
+Courier keeps a vault and one branch of a GitLab repository in sync through GitLab's REST API, so it
+works the same on Windows, macOS, Linux, iPhone and Android. Every sync is an ordinary Git commit, so
+the full history is on GitLab and the repository works with a normal desktop Git workflow too.
 
-Courier keeps a vault and a single GitLab repository branch in sync using only the
-GitLab REST API. It is designed for mobile devices (where Git is unavailable) while staying fully
-interoperable with an ordinary desktop Git workflow against the same branch.
+Courier works with [Enclave](https://github.com/flo-wolf/obsidian-enclave): notes Enclave encrypts
+are only ever uploaded locked, never as plain text, and conflicts between locked notes can still be
+merged. See [Working with Enclave](#working-with-enclave).
+
+Courier is a fork of [GitLab Gitless Sync](https://github.com/TerekhinAO/obsidian-gitlab-sync) by
+Alexander Terekhin, itself based on GitHub Gitless Sync by Silvano Cerza.
 
 ## What you get
 
@@ -21,7 +23,10 @@ interoperable with an ordinary desktop Git workflow against the same branch.
 - **Manual sync when you need it** — run **Sync with GitLab** from the sidebar icon or command
   palette at any time.
 - **Data-safe sync** — the default strategy tries to auto-merge text files first, and when
-  files conflict, both versions are kept as separate files.
+  files conflict, both versions are kept until you resolve them in the
+  [conflict window](#resolving-conflicts).
+- **Enclave support** — unlocked notes are held back until they're locked, so their plain text
+  never reaches GitLab or its history. See [Working with Enclave](#working-with-enclave).
 - **Secure token storage** — the GitLab token stays in Obsidian SecretStorage, while
   local sync metadata stays on the device and is never committed.
 
@@ -37,7 +42,7 @@ Browse**, search for **Courier**, install and enable it.
 ### Manual
 
 Download `main.js`, `manifest.json`, and `styles.css` from the
-[latest release](https://github.com/TerekhinAO/obsidian-gitlab-sync/releases) and copy them
+[latest release](https://github.com/flo-wolf/obsidian-courier/releases/latest) and copy them
 into `<vault>/.obsidian/plugins/courier/`, then enable the plugin.
 
 ## Getting started
@@ -92,7 +97,9 @@ anything; nothing happens until you confirm. One button handles every starting s
 - **Repository has commits (the default case) → merge.** Remote files are downloaded into the vault.
   Files that exist only locally are kept and pushed on the next sync. When the same file exists on
   both sides and differs, **both versions are kept**: the GitLab version takes the original path and
-  your version is saved beside it as `<name> (local conflict).<ext>`. Nothing is deleted.
+  your version is saved beside it as `<name> (local conflict).<ext>`. Nothing is deleted. These
+  copies from connecting aren't listed in the conflict window; compare them by hand and delete the
+  one you don't need.
 - **Repository is empty (no commits, no branches) → initial commit.** Your whole vault is pushed as
   the first commit, and that commit creates the branch named in **Branch**, whatever you typed there —
   it does not have to match the default branch GitLab preconfigured for the project. Nothing is
@@ -173,9 +180,10 @@ calls to the GitLab REST API. That is what makes it work on iOS and Android.
 **Ordinary Git commits.** The plugin writes real commits with your configured author, so desktop
 collaborators keep using plain `git pull`/`git push` on the same branch and see nothing unusual.
 
-**Nothing is silently lost.** Both sides of a conflict are always preserved; the losing version
-becomes a conflict copy instead of being overwritten. A delete that clashes with an edit produces a
-Markdown marker rather than removing the file. Binary files are copied byte-for-byte.
+**Nothing is silently lost.** Both sides of a conflict are always preserved; the other version
+becomes a conflict copy instead of being overwritten, until you resolve it. A delete that clashes
+with an edit produces a Markdown marker rather than removing the file. Binary files are copied
+byte-for-byte.
 
 **Fast, incremental syncs.** A normal sync does not scan or hash the whole vault — it works from a
 local journal of what changed plus a remote diff. There is a separate **Full audit and sync** command
@@ -188,6 +196,51 @@ interrupted, the next sync detects the pending transaction and finishes it.
 are never committed, so the repository stays clean and devices never fight over metadata.
 
 **Self-managed GitLab.** Any HTTPS GitLab instance works, alongside gitlab.com.
+
+## Resolving conflicts
+
+A conflict is a file changed on this device and on GitLab before either side synced, in ways the
+automatic merge couldn't combine. Courier keeps one version at the file's path and the other in a
+copy next to it, named `<name> — conflict <device> <date>`, and records the conflict.
+
+Run **Resolve sync conflicts**, or just sync by hand: a manual sync that finds conflicts opens the
+conflict window right away.
+
+- Parts changed on one side only are already filled in, compared against the last synced version.
+- For each spot changed on both sides, choose **this device's**, **GitLab's**, or **both**. The two
+  versions are shown side by side, or stacked on a phone.
+- Or keep one whole version. Files that aren't text, such as images, only offer that.
+
+Saving writes the result to the note and deletes the copy; the next sync uploads both. **Decide
+later** leaves everything as it is.
+
+## Working with Enclave
+
+[Enclave](https://github.com/flo-wolf/obsidian-enclave) encrypts notes and folders. An unlocked
+note's plain text is on disk while you work on it, so a sync tool could upload it. Courier never
+does:
+
+- **Unlocked notes are held back.** The note's last locked version stays on GitLab. Once Enclave
+  locks it again (when you leave the note, after inactivity, or when Obsidian is hidden or closed),
+  the next sync uploads it, locked. The sync notice tells you how many notes were held back.
+- **Notes waiting to be locked** in a locked folder, and notes a crash left unlocked, are held back
+  too.
+- **A second check works without Enclave.** A note that was locked when last synced and is plain
+  now is only uploaded if Enclave confirms you decrypted it on purpose. If Enclave is enabled but
+  hasn't finished loading, Courier doesn't sync at all rather than guess.
+- **Changes from other devices wait for unlocked notes.** Courier doesn't overwrite a note you have
+  open in plain text. The change is applied once the note is locked; if you changed it too, you get a
+  conflict to resolve, nothing is lost.
+- **Lock all notes before syncing.** With this setting (on by default, only shown when Enclave is
+  enabled), syncing with the sidebar button or the Sync command locks every unlocked note first, so
+  everything goes up at once. Automatic syncs never lock your notes; they only hold them back.
+- **Locked notes are never merged line by line**, since encrypted text can't be merged. In the
+  conflict window, Enclave decrypts the versions in memory only, asking for any password it doesn't
+  have, and the merged note is locked again before it's saved. Without Enclave, you can still keep
+  one whole version.
+
+Enclave also writes back a note's exact earlier encrypted version when you lock it unchanged, so
+opening a note without editing it causes no upload and no conflict.
 
 ## Settings reference
 
@@ -210,8 +263,10 @@ never overwrites either side; this setting only decides which version keeps the 
 - **Auto merge, fallback Remote** *(default)* — try a line-based three-way merge of the text file
   first; if it conflicts or the file is binary, fall back to *Remote*.
 - **Auto merge, fallback Local** — same merge attempt, falling back to *Local*.
-- **Remote** — GitLab's version keeps the path; yours is saved as `<name> (local conflict).<ext>`.
+- **Remote** — GitLab's version keeps the path; yours is saved as a conflict copy.
 - **Local** — your version keeps the path and gets committed; GitLab's is saved as a conflict copy.
+
+Either way, the conflict waits for you in the [conflict window](#resolving-conflicts).
 
 A deletion that clashes with a change on the other side produces a Markdown conflict marker instead
 of removing the file.
@@ -219,6 +274,8 @@ of removing the file.
 ### Interface and diagnostics
 
 - **Show sidebar icon** — a one-tap sync button in the left ribbon.
+- **Lock all notes before syncing** (with Enclave) — a manual sync locks every unlocked note first.
+- **Resolve sync conflicts** (command) — opens the conflict window.
 - **Log level** — `Off` by default. Use `Debug` only while diagnosing sync behavior.
 - **Copy logs** / **Clean logs** — export or clear the plugin log.
 - **Show GitLab sync status** (command) — base commit, pending local changes, last sync result.
@@ -261,9 +318,10 @@ and access token are required.
 
 ## Credits & License
 
-This project is an independently maintained GitLab rewrite, based on
+Courier is a fork of [GitLab Gitless Sync](https://github.com/TerekhinAO/obsidian-gitlab-sync) by
+Alexander Terekhin, an independently maintained GitLab rewrite of
 [GitHub Gitless Sync](https://github.com/silvanocerza/github-gitless-sync) by Silvano Cerza.
-Modified in 2026 by Alexander Terekhin.
+Enclave support, the conflict window, and related changes by Florian Wolf, 2026.
 
 Licensed under **AGPL-3.0-only**. The upstream license and attribution are preserved — see
 [`LICENSE`](LICENSE) and [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).
