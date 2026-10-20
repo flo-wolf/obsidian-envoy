@@ -127,6 +127,7 @@ function fakeClient(options: {
   branch?: GitLabBranch;
   tree?: GitLabTreeItem[];
   archive?: ArrayBuffer;
+  blobs?: Record<string, string>;
 }) {
   const branch =
     options.branch ??
@@ -135,6 +136,10 @@ function fakeClient(options: {
   return {
     getBranch: vi.fn(async () => branch),
     getTree: vi.fn(async () => options.tree ?? []),
+    getRawBlob: vi.fn(async (blobId: string) => {
+      const text = options.blobs?.[blobId];
+      return text === undefined ? null : arrayBuffer(bytes(text));
+    }),
     downloadArchive: vi.fn(async () => {
       if (options.archive === undefined) {
         throw new Error("archive not configured");
@@ -155,6 +160,7 @@ async function fixture(options: {
   branch?: GitLabBranch;
   tree?: GitLabTreeItem[];
   archive?: ArrayBuffer;
+  blobs?: Record<string, string>;
   journal?: ReturnType<typeof fakeJournal>;
 }) {
   const vault = fakeVault(options.localFiles);
@@ -302,9 +308,42 @@ describe("BootstrapService", () => {
       if (preview.mode !== "merge") throw new Error("expected merge preview");
       expect(preview.localPushPaths).toEqual([".gitignore", ".obsidian/app.json", "note.md"]);
     });
+
+    it("applies the repository's .gitignore on a fresh device and names replaced settings", async () => {
+      const setup = await fixture({
+        localFiles: {
+          ".obsidian/app.json": bytes("{}"),
+          ".obsidian/workspace-mobile.json": bytes("{}"),
+        },
+        tree: [
+          { id: "ignore", name: ".gitignore", type: "blob", path: ".gitignore", mode: "100644" },
+          { id: "app", name: "app.json", type: "blob", path: ".obsidian/app.json", mode: "100644" },
+        ],
+        blobs: { ignore: ".obsidian/workspace-mobile.json\n" },
+      });
+      const preview = await setup.service.preview();
+      if (preview.mode !== "merge") throw new Error("expected merge preview");
+      expect(preview.localPushPaths).toEqual([]);
+      expect(preview.conflictCount).toBe(0);
+      expect(preview.replacedSettingsPaths).toEqual([".obsidian/app.json"]);
+    });
   });
 
   describe("BootstrapService.merge", () => {
+    it("replaces a differing settings file with the repository's version, without a copy", async () => {
+      const archive = await zip([{ path: "root/.obsidian/app.json", content: "{\"remote\":true}" }]);
+      const setup = await fixture({
+        localFiles: { ".obsidian/app.json": bytes("{}") },
+        tree: [{ id: "a", name: "app.json", type: "blob", path: ".obsidian/app.json", mode: "100644" }],
+        archive,
+      });
+      const result = await setup.service.merge();
+      expect(setup.read(".obsidian/app.json")).toEqual(bytes("{\"remote\":true}"));
+      expect(setup.read(".obsidian/app (local conflict).json")).toBeUndefined();
+      expect(result.conflictCopyPaths).toEqual([]);
+      expect(result.settingsChanged).toBe(true);
+    });
+
     it("writes remote-only files", async () => {
       const archive = await zip([{ path: "root/note.md", content: "remote" }]);
       const setup = await fixture({

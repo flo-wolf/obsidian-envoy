@@ -49,19 +49,27 @@ export class ConnectConfirmModal extends Modal {
     });
 
     this.contentEl.createEl("p", { text: "This vault:" });
-    if (preview.localPushCount === 0) {
-      this.contentEl.createEl("p", { text: "No files to push." });
+    const pushPaths = preview.localPushPaths;
+    if (pushPaths.length === 0) {
+      this.contentEl.createEl("p", { text: "No new files to push." });
     } else {
       this.contentEl.createEl("p", {
-        text: `${files(preview.localPushCount)} will be pushed to GitLab on the next sync, e.g.:`,
+        text: `${files(pushPaths.length)} only on this device will be pushed to GitLab on the next sync, e.g.:`,
       });
-      this.renderPathList(preview.localPushPaths, preview.localPushCount);
+      this.renderPathList(pushPaths, pushPaths.length);
+    }
+    const replaced = preview.replacedSettingsPaths;
+    if (replaced.length > 0) {
+      this.contentEl.createEl("p", {
+        text: `${files(replaced.length)} of this device's settings will be replaced by the repository's version:`,
+      });
+      this.renderPathList(replaced, replaced.length);
     }
     this.contentEl.createEl("p", {
       text: `${files(preview.conflictCount)} changed on both sides.`,
     });
     this.contentEl.createEl("p", {
-      text: "Nothing is deleted. When the same file differs on both sides, both versions are kept.",
+      text: "Nothing is deleted. When a file outside the settings differs on both sides, both versions are kept.",
     });
   }
 

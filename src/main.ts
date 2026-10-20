@@ -279,7 +279,9 @@ export default class GitLabGitlessSyncPlugin extends Plugin {
       new Notice(
         preview.mode === "seed"
           ? "Repository initialized from vault"
-          : "Connected to GitLab",
+          : "settingsChanged" in result && result.settingsChanged
+            ? "Connected to GitLab. Restart Obsidian to load the vault's settings and plugins."
+            : "Connected to GitLab",
       );
     } catch (error) {
       await this.logger.error("Connect failed", { error: String(error) });
@@ -291,9 +293,9 @@ export default class GitLabGitlessSyncPlugin extends Plugin {
 
   private async connectMerge(
     service: BootstrapService,
-  ): Promise<Awaited<ReturnType<SyncManager["adoptExistingVault"]>>> {
-    await service.merge();
-    return await this.syncManager.adoptExistingVault();
+  ): Promise<Awaited<ReturnType<SyncManager["adoptExistingVault"]>> & { settingsChanged: boolean }> {
+    const { settingsChanged } = await service.merge();
+    return { ...(await this.syncManager.adoptExistingVault()), settingsChanged };
   }
 
   showSyncRibbonIcon() {

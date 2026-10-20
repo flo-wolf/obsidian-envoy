@@ -13,6 +13,7 @@ const MERGE_PREVIEW = {
   localPushCount: 0,
   localPushPaths: [] as string[],
   conflictCount: 0,
+  replacedSettingsPaths: [],
 };
 
 function fakePluginData(overrides: any = {}) {
@@ -469,7 +470,7 @@ describe("plugin lifecycle", () => {
 
     const merge = vi
       .spyOn(BootstrapService.prototype, "merge")
-      .mockResolvedValue({ commitSha: "sha", conflictCopyPaths: [] });
+      .mockResolvedValue({ commitSha: "sha", conflictCopyPaths: [], settingsChanged: false });
     const adopt = vi
       .spyOn(SyncManager.prototype, "adoptExistingVault")
       .mockResolvedValue({ status: "success", message: "ok" } as any);
@@ -516,7 +517,7 @@ describe("plugin lifecycle", () => {
 
     vi
       .spyOn(BootstrapService.prototype, "merge")
-      .mockResolvedValue({ commitSha: "sha", conflictCopyPaths: [] });
+      .mockResolvedValue({ commitSha: "sha", conflictCopyPaths: [], settingsChanged: false });
     vi
       .spyOn(SyncManager.prototype, "adoptExistingVault")
       .mockResolvedValue({ status: "error", message: "boom" } as any);
@@ -546,6 +547,7 @@ describe("plugin lifecycle", () => {
       localPushCount: 1,
       localPushPaths: ["Welcome.md"],
       conflictCount: 0,
+      replacedSettingsPaths: [],
     };
     vi.spyOn(GitLabClient.prototype, "getProject").mockResolvedValue({
       empty_repo: false,

@@ -28,6 +28,8 @@ export interface ConnectMergePreview {
   localPushCount: number;
   localPushPaths: string[];
   conflictCount: number;
+  // Settings files that differ: the repository's version replaces this device's.
+  replacedSettingsPaths: string[];
 }
 
 export interface ConnectSeedPreview {
@@ -42,6 +44,8 @@ export type ConnectPreview = ConnectMergePreview | ConnectSeedPreview;
 export interface ConnectMergeResult {
   commitSha: string;
   conflictCopyPaths: string[];
+  // True when anything in the config folder was written, so Obsidian needs a restart.
+  settingsChanged: boolean;
 }
 
 interface BootstrapJournal {
@@ -50,7 +54,7 @@ interface BootstrapJournal {
 
 export interface BootstrapServiceOptions {
   vault: BootstrapVault;
-  client: Pick<GitLabClient, "getBranch" | "getTree" | "downloadArchive">;
+  client: Pick<GitLabClient, "getBranch" | "getTree" | "getRawBlob" | "downloadArchive">;
   journal?: BootstrapJournal;
   pluginId?: string;
 }
@@ -68,6 +72,7 @@ export class BootstrapService {
     const archive = await this.options.client.downloadArchive(commitSha);
     const operations = await this.readArchive(archive);
     const conflictCopyPaths: string[] = [];
+    let settingsChanged = false;
 
     await this.suppressJournal(async () => {
       for (const operation of operations) {
@@ -77,6 +82,7 @@ export class BootstrapService {
         }
         if (!(await this.options.vault.adapter.exists(operation.path))) {
           await this.writeFile(operation.path, operation.data);
+          settingsChanged ||= this.isSettingsPath(operation.path);
           continue;
         }
         const local = new Uint8Array(
@@ -84,6 +90,13 @@ export class BootstrapService {
         );
         if (sameBytes(local, operation.data)) {
           continue; // identical, adopt as-is
+        }
+        if (this.isSettingsPath(operation.path)) {
+          // The vault shares one setup: a copy of this device's settings would
+          // only be clutter that gets pushed, so the repository's version wins.
+          await this.writeFile(operation.path, operation.data);
+          settingsChanged = true;
+          continue;
         }
         // differ: remote wins at the path, local preserved as a conflict copy
         const copyPath = await this.availableConflictCopyPath(operation.path);
@@ -93,7 +106,7 @@ export class BootstrapService {
       }
     });
 
-    return { commitSha, conflictCopyPaths };
+    return { commitSha, conflictCopyPaths, settingsChanged };
   }
 
   private async availableConflictCopyPath(path: string): Promise<string> {
@@ -116,12 +129,14 @@ export class BootstrapService {
       await this.options.client.getTree(commitSha),
       (path) => this.isHardExcluded(path),
     );
-    // Same rules as sync, so the preview lists only what will really be pushed.
-    const ignoreMatcher = new IgnoreMatcher(this.options.vault, this.pluginId);
+    // Same rules as the sync after connecting, which runs once the repository's
+    // .gitignore files are downloaded, so the preview lists only what will be pushed.
+    const ignoreMatcher = new IgnoreMatcher(this.vaultAfterMerge(remoteIndex), this.pluginId);
     await ignoreMatcher.reload();
     const localPaths = await this.listLocalFiles("", ignoreMatcher);
 
     const localPushPaths: string[] = [];
+    const replacedSettingsPaths: string[] = [];
     let conflictCount = 0;
     for (const path of localPaths) {
       if (ignoreMatcher.isIgnored(path, remoteIndex)) continue;
@@ -131,18 +146,48 @@ export class BootstrapService {
         continue;
       }
       const bytes = new Uint8Array(await this.options.vault.adapter.readBinary(path));
-      if ((await calculateGitBlobId(bytes)) !== remote.blobId) {
+      if ((await calculateGitBlobId(bytes)) === remote.blobId) continue;
+      if (this.isSettingsPath(path)) {
+        replacedSettingsPaths.push(path);
+      } else {
         conflictCount += 1;
       }
     }
 
     localPushPaths.sort();
+    replacedSettingsPaths.sort();
     return {
       mode: "merge",
       remoteFileCount: Object.keys(remoteIndex).length,
       localPushCount: localPushPaths.length + conflictCount,
       localPushPaths,
       conflictCount,
+      replacedSettingsPaths,
+    };
+  }
+
+  // The vault as the ignore rules will see it after merge(): a .gitignore that
+  // exists in the repository replaces the local one.
+  private vaultAfterMerge(remoteIndex: Record<string, TrackedFile>): BootstrapVault {
+    const vault = this.options.vault;
+    const client = this.options.client;
+    const remoteIgnoreFile = (path: string): TrackedFile | undefined => {
+      const normalized = normalizePath(path);
+      const isIgnoreFile = normalized === ".gitignore" || normalized.endsWith("/.gitignore");
+      return isIgnoreFile ? remoteIndex[normalized] : undefined;
+    };
+    return {
+      configDir: vault.configDir,
+      adapter: {
+        ...vault.adapter,
+        exists: async (path) => !!remoteIgnoreFile(path) || (await vault.adapter.exists(path)),
+        read: async (path) => {
+          const remote = remoteIgnoreFile(path);
+          if (!remote) return await vault.adapter.read(path);
+          const data = await client.getRawBlob(remote.blobId);
+          return data ? new TextDecoder().decode(data) : "";
+        },
+      },
     };
   }
 
@@ -300,6 +345,10 @@ export class BootstrapService {
     const configDir = normalizePath(this.options.vault.configDir);
     const pluginDir = `${configDir}/plugins/${this.pluginId}`;
     return path === pluginDir || path.startsWith(`${pluginDir}/`);
+  }
+
+  private isSettingsPath(path: string): boolean {
+    return normalizePath(path).startsWith(`${normalizePath(this.options.vault.configDir)}/`);
   }
 
   private isHardExcluded(path: string): boolean {

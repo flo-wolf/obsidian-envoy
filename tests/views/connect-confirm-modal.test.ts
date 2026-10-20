@@ -12,26 +12,43 @@ describe("ConnectConfirmModal", () => {
       remoteFileCount: 128,
       localPushCount: 12,
       conflictCount: 0,
+      replacedSettingsPaths: [],
       localPushPaths: Array.from({ length: 12 }, (_, i) => `note-${i}.md`),
     };
     const modal = new ConnectConfirmModal(makeApp(), "group/project", "main", preview, vi.fn());
     modal.onOpen();
     const text = modal.contentEl.textContent ?? "";
     expect(text).toContain("128 files will be downloaded");
-    expect(text).toContain("12 files will be pushed");
+    expect(text).toContain("12 files only on this device will be pushed");
     expect(text).toContain("and 2 more");
   });
 
-  it("renders the zero-push line", () => {
-    const preview = { mode: "merge" as const, remoteFileCount: 5, localPushCount: 0, conflictCount: 0, localPushPaths: [] };
+  it("lists the settings files the repository's version replaces", () => {
+    const preview = {
+      mode: "merge" as const,
+      remoteFileCount: 44,
+      localPushCount: 0,
+      conflictCount: 0,
+      replacedSettingsPaths: [".obsidian/app.json", ".obsidian/appearance.json"],
+      localPushPaths: [],
+    };
     const modal = new ConnectConfirmModal(makeApp(), "g/p", "main", preview, vi.fn());
     modal.onOpen();
-    expect(modal.contentEl.textContent ?? "").toContain("No files to push");
+    const text = modal.contentEl.textContent ?? "";
+    expect(text).toContain("2 files of this device's settings will be replaced");
+    expect(text).toContain(".obsidian/appearance.json");
+  });
+
+  it("renders the zero-push line", () => {
+    const preview = { mode: "merge" as const, remoteFileCount: 5, localPushCount: 0, conflictCount: 0, replacedSettingsPaths: [], localPushPaths: [] };
+    const modal = new ConnectConfirmModal(makeApp(), "g/p", "main", preview, vi.fn());
+    modal.onOpen();
+    expect(modal.contentEl.textContent ?? "").toContain("No new files to push");
   });
 
   it("invokes the callback when Connect is clicked", () => {
     const onConfirm = vi.fn();
-    const preview = { mode: "merge" as const, remoteFileCount: 1, localPushCount: 0, conflictCount: 0, localPushPaths: [] };
+    const preview = { mode: "merge" as const, remoteFileCount: 1, localPushCount: 0, conflictCount: 0, replacedSettingsPaths: [], localPushPaths: [] };
     const modal = new ConnectConfirmModal(makeApp(), "g/p", "main", preview, onConfirm);
     modal.onOpen();
     modal.confirm();
@@ -45,7 +62,7 @@ describe("ConnectConfirmModal", () => {
     }));
     const notices: string[] = [];
     (globalThis as any).__noticeSpy = (message: string) => notices.push(message);
-    const preview = { mode: "merge" as const, remoteFileCount: 1, localPushCount: 0, conflictCount: 0, localPushPaths: [] };
+    const preview = { mode: "merge" as const, remoteFileCount: 1, localPushCount: 0, conflictCount: 0, replacedSettingsPaths: [], localPushPaths: [] };
     const modal = new ConnectConfirmModal(makeApp(), "g/p", "main", preview, onConfirm);
     modal.onOpen();
 

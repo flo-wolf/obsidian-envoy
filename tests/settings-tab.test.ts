@@ -137,6 +137,7 @@ describe("settings tab render", () => {
       localPushCount: 0,
       localPushPaths: [],
       conflictCount: 0,
+      replacedSettingsPaths: [],
     }));
 
     // ConnectConfirmModal.confirm() runs close() + onConfirm(); by having the
