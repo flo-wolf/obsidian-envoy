@@ -9,10 +9,11 @@ import { BootstrapService, type ConnectPreview } from "./sync/bootstrap-service"
 import { GitLabClient } from "./gitlab/client";
 import { GitLabNotFoundError } from "./gitlab/errors";
 import { DeviceSpecificPaths } from "./sync/device-specific";
+import { OBSIDIAN_SYNC_WARNING, obsidianSyncEnabled } from "./obsidian-sync";
 import { ConflictService } from "./conflicts/conflict-service";
 import { enclaveApi } from "./enclave/enclave-api";
 import { ConflictListModal, ConflictModal } from "./views/conflict-modal";
-import type { ConflictRecord } from "./sync/types";
+import type { ConflictRecord, SyncHistoryEntry } from "./sync/types";
 
 const FOREGROUND_SYNC_COOLDOWN_MS = 30_000;
 const BACKGROUND_SYNC_COOLDOWN_MS = 30_000;
@@ -86,6 +87,7 @@ export default class GitLabGitlessSyncPlugin extends Plugin {
 
       this.registerEditSyncListeners();
       this.refreshAutoSyncInterval();
+      void this.warnAboutObsidianSync();
 
       const recovered = await this.syncManager.recoverIfNeeded();
       if (!recovered && this.settings.syncOnStartup && this.pluginData.state.initialized) {
@@ -330,6 +332,28 @@ export default class GitLabGitlessSyncPlugin extends Plugin {
   async reset() {
     this.pluginData.state = { ...DEFAULT_STATE, trackedFiles: {}, dirtyEntries: {} };
     await this.saveSettings();
+  }
+
+  /** Once per device: two sync services on the same files get in each other's way. */
+  private async warnAboutObsidianSync(): Promise<void> {
+    if (this.settings.obsidianSyncWarningShown || !(await obsidianSyncEnabled(this.app.vault))) {
+      return;
+    }
+    new Notice(OBSIDIAN_SYNC_WARNING, 20000);
+    this.settings.obsidianSyncWarningShown = true;
+    await this.saveSettings();
+  }
+
+  /** The latest syncs on this device that changed something or failed, newest first. */
+  async loadSyncHistory(): Promise<SyncHistoryEntry[]> {
+    return (await this.stateStore.load()).state.syncHistory ?? [];
+  }
+
+  async clearSyncHistory(): Promise<void> {
+    await this.stateStore.update((data) => {
+      data.state.syncHistory = [];
+    });
+    this.pluginData = await this.stateStore.load();
   }
 
   private isConfigured(): boolean {

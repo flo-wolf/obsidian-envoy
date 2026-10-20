@@ -105,3 +105,95 @@
 	min-height: 6em;
 	font-family: var(--font-monospace);
 }
+
+/* Settings: sync history, one collapsible block per sync. */
+.envoy-history {
+	display: flex;
+	flex-direction: column;
+	gap: var(--size-4-1);
+	padding-bottom: var(--size-4-4);
+}
+.envoy-history-empty {
+	color: var(--text-muted);
+	font-size: var(--font-ui-small);
+}
+.envoy-history-entry {
+	border: var(--border-width) solid var(--background-modifier-border);
+	border-radius: var(--radius-s);
+	background-color: var(--background-secondary);
+}
+.envoy-history-entry > summary {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: baseline;
+	gap: var(--size-4-2);
+	padding: var(--size-4-2) var(--size-4-3);
+	cursor: var(--cursor);
+	font-size: var(--font-ui-small);
+}
+.envoy-history-when {
+	font-weight: var(--font-semibold);
+}
+.envoy-history-trigger {
+	color: var(--text-muted);
+}
+.envoy-history-counts {
+	margin-inline-start: auto;
+	color: var(--text-muted);
+	font-variant-numeric: tabular-nums;
+}
+.envoy-history-counts.mod-error,
+.envoy-history-error {
+	color: var(--text-error);
+}
+.envoy-history-body {
+	padding: 0 var(--size-4-3) var(--size-4-2);
+	font-size: var(--font-ui-small);
+}
+.envoy-history-error {
+	margin: 0 0 var(--size-4-2);
+}
+.envoy-history-label {
+	margin-top: var(--size-4-2);
+	color: var(--text-muted);
+	font-size: var(--font-ui-smaller);
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+}
+.envoy-history-files {
+	margin: var(--size-4-1) 0 0;
+	padding: 0;
+	list-style: none;
+}
+.envoy-history-files li {
+	display: flex;
+	align-items: baseline;
+	gap: var(--size-4-2);
+	padding: var(--size-2-1) 0;
+}
+.envoy-history-change {
+	flex: none;
+	min-width: 4.5em;
+	color: var(--text-muted);
+	font-size: var(--font-ui-smaller);
+}
+.envoy-history-change.mod-added {
+	color: var(--color-green);
+}
+.envoy-history-change.mod-deleted {
+	color: var(--color-red);
+}
+.envoy-history-path {
+	font-family: var(--font-monospace);
+	font-size: var(--font-ui-smaller);
+	overflow-wrap: anywhere;
+}
+.envoy-history-more {
+	margin: var(--size-4-1) 0 0;
+	color: var(--text-muted);
+}
+
+/* Settings: a warning row, e.g. while Obsidian Sync is also turned on. */
+.envoy-warning-setting .setting-item-name {
+	color: var(--text-warning);
+}

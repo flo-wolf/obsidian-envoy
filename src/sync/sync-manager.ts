@@ -15,6 +15,7 @@ import { LocalMaterializer } from "./local-materializer";
 import { LocalSnapshotService, type LocalSnapshotEntry, type VersionState } from "./local-snapshot";
 import { calculateGitBlobId, toBase64 } from "./conflict-resolver";
 import { DeviceSpecificPaths } from "./device-specific";
+import { describeChanges, isNoteworthy, withEntry, type SyncChanges } from "./sync-history";
 import { RemoteDiffService, type RemoteChange, type RemoteDiffClient } from "./remote-diff";
 import { StateStore } from "./state-store";
 import { SyncPlanner, type SyncPlan } from "./sync-planner";
@@ -24,6 +25,7 @@ import type {
   MaterializeOperation,
   PendingTransaction,
   PluginData,
+  SyncHistoryEntry,
   TrackedFile,
 } from "./types";
 
@@ -40,6 +42,8 @@ export interface SyncResult {
   pulled?: number;
   /** Files created, changed or deleted on GitLab. */
   pushed?: number;
+  /** What changed, file by file, for the sync history. */
+  changes?: SyncChanges;
 }
 
 export type SyncTrigger =
@@ -403,12 +407,28 @@ export class SyncManager {
         progress,
       });
       this.options.notice?.("Sync complete", completionDetail(result));
+      await this.recordHistory({
+        trigger,
+        status: result.status === "conflict" ? "conflict" : "success",
+        held: (result.held ?? []).map((note) => note.path),
+        ...(result.changes ?? { pulled: [], pushed: [], merged: [], conflicts: [] }),
+      });
       return result;
     } catch (error) {
       const message = errorMessage(error);
       await this.markError();
       await this.options.logger?.error("Sync failed", { message });
       this.options.notice?.(`Error syncing. ${message}`);
+      await this.recordHistory({
+        trigger,
+        status: "error",
+        error: message,
+        held: [],
+        pulled: [],
+        pushed: [],
+        merged: [],
+        conflicts: [],
+      });
       return {
         status: "error",
         trigger,
@@ -495,6 +515,13 @@ export class SyncManager {
         return {
           ...(await this.applyRemoteOnlyPlan(input.trigger, remoteSha, plan, holds.deferred, input.progress)),
           held: holds.held,
+          changes: describeChanges({
+            actions: [],
+            materialized: plan.materializeWithoutCommit,
+            mergedPaths: plan.mergedPaths,
+            conflictRecords: plan.conflictRecords,
+            trackedBefore: data.state.trackedFiles,
+          }),
         };
       }
 
@@ -541,6 +568,13 @@ export class SyncManager {
         held: holds.held,
         pulled: transaction.materializeOperations.length,
         pushed: plan.actions.length,
+        changes: describeChanges({
+          actions: plan.actions,
+          materialized: transaction.materializeOperations,
+          mergedPaths: finalizedPlan.mergedPaths,
+          conflictRecords: finalizedPlan.conflictRecords,
+          trackedBefore: data.state.trackedFiles,
+        }),
       };
     }
 
@@ -601,6 +635,7 @@ export class SyncManager {
       ...replanned,
       conflictPaths: [...plan.conflictPaths, ...replanned.conflictPaths],
       conflictRecords: [...plan.conflictRecords, ...replanned.conflictRecords],
+      mergedPaths: [...plan.mergedPaths, ...replanned.mergedPaths],
     };
   }
 
@@ -872,6 +907,21 @@ export class SyncManager {
       throw new Error("GitLab client does not support remote diff discovery");
     }
     return client;
+  }
+
+  /** Adds a sync to the history shown in the settings, if it changed something or failed. */
+  private async recordHistory(entry: Omit<SyncHistoryEntry, "at">): Promise<void> {
+    const full: SyncHistoryEntry = { at: this.now(), ...entry };
+    if (!isNoteworthy(full)) {
+      return;
+    }
+    try {
+      await this.options.stateStore.update((data) => {
+        data.state.syncHistory = withEntry(data.state.syncHistory ?? [], full);
+      });
+    } catch (error) {
+      await this.options.logger?.warn("Could not save the sync history", { message: errorMessage(error) });
+    }
   }
 
   private deviceSpecificFor(settings: GitLabSyncSettings): DeviceSpecificPaths {

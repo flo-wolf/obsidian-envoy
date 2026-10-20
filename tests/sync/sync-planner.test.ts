@@ -29,6 +29,7 @@ describe("SyncPlanner", () => {
       acknowledgedDirtyPaths: ["note.md"],
       conflictPaths: [],
       conflictRecords: [],
+      mergedPaths: [],
     });
   });
 

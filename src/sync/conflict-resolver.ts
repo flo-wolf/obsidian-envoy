@@ -11,6 +11,8 @@ export interface ConflictResolutionPlan {
   materializeOperations: MaterializeOperation[];
   conflictPaths: string[];
   conflictRecords: ConflictRecord[];
+  /** Files changed on both sides whose changes were combined automatically. */
+  mergedPaths: string[];
   nextIndexMutations: Array<
     | { type: "set"; path: string; file: TrackedFile }
     | { type: "delete"; path: string }
@@ -42,6 +44,7 @@ export class ConflictResolver {
       materializeOperations: [],
       conflictPaths: [],
       conflictRecords: [],
+      mergedPaths: [],
       nextIndexMutations: [],
     };
     const occupied = new Set<string>([
@@ -95,6 +98,7 @@ export class ConflictResolver {
       const merged = autoMergeText(snapshot.path, base, snapshot.local, remote);
       if (merged !== null) {
         await commitAndMaterializeOriginal(snapshot.path, merged, remote.exists, plan);
+        plan.mergedPaths.push(snapshot.path);
         return;
       }
     }

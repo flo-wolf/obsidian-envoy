@@ -173,6 +173,14 @@ export class MockElement {
     return child;
   }
 
+  createDiv(options?: { text?: string }): MockElement {
+    return this.createEl("div", options);
+  }
+
+  createSpan(options?: { text?: string }): MockElement {
+    return this.createEl("span", options);
+  }
+
   setText(text: string): void {
     this.ownText = text;
     this.children = [];

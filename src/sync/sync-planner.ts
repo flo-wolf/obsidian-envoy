@@ -17,6 +17,7 @@ export interface SyncPlan {
   acknowledgedDirtyPaths: string[];
   conflictPaths: string[];
   conflictRecords: ConflictRecord[];
+  mergedPaths: string[];
 }
 
 interface SyncPlannerOptions {
@@ -110,6 +111,7 @@ export class SyncPlanner {
         .filter((path) => dirtyPaths.has(path)),
       conflictPaths: conflictPlan.conflictPaths,
       conflictRecords: conflictPlan.conflictRecords,
+      mergedPaths: conflictPlan.mergedPaths,
     };
   }
 

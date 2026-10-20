@@ -50,6 +50,10 @@ into `<vault>/.obsidian/plugins/envoy/`, then enable the plugin.
 Four steps: create the repository and a token, connect the vault, turn on automatic sync, add a
 `.gitignore`.
 
+If Obsidian's own Sync is turned on (Settings → Core plugins → Sync, on by default in new vaults),
+turn it off first: two sync services on the same files get in each other's way. Envoy reminds you
+once per device, and shows a warning in its settings while it's on.
+
 ### Step 1 — Create the GitLab repository and an access token
 
 1. Create a project in GitLab — either on [gitlab.com](https://gitlab.com) or on a self-managed
@@ -281,6 +285,8 @@ of removing the file.
 - **Log level** — `Off` by default. Use `Debug` only while diagnosing sync behavior.
 - **Copy logs** / **Clean logs** — export or clear the plugin log.
 - **Show GitLab sync status** (command) — base commit, pending local changes, last sync result.
+- **Sync history** (bottom of the settings) — the latest 30 syncs on this device that changed
+  something or failed. Each opens to the files pulled, pushed, merged, in conflict or held back.
 - **Reset local sync state** — makes this device forget what it remembers about past syncs, as if it
   had never been connected. Use it when sync is stuck or keeps failing. No file is deleted and nothing
   changes on GitLab. Afterwards you connect again: files that match the repository are kept, settings

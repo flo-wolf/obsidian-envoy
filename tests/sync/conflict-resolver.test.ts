@@ -287,6 +287,7 @@ describe("ConflictResolver", () => {
       conflictPaths: testCase.wantConflicts,
       // Conflict records have their own tests below.
       conflictRecords: expect.any(Array),
+      mergedPaths: expect.any(Array),
       nextIndexMutations: testCase.wantMutations,
     });
   });

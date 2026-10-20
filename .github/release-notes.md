@@ -1,1 +1,2 @@
-Changes in the config folder (settings, enabled plugins, themes, snippets) and dot-files like `.gitignore` are now synced by every sync. Obsidian reports no file changes there, so before, only "Full audit and sync" picked them up. Envoy checks these files itself and only reads the ones whose modification time or size changed.
+- **Sync history** at the bottom of the settings: the latest 30 syncs on this device that changed something or failed. Each one opens to the files pulled, pushed, merged, in conflict or held back.
+- Envoy warns (once per device, and in its settings) while Obsidian's own Sync core plugin is turned on, since two sync services on the same files get in each other's way.

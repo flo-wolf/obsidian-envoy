@@ -28,6 +28,7 @@ const settings: GitLabSyncSettings = {
   conflictStrategy: "remote",
   lockBeforeManualSync: false,
   deviceSpecificPaths: [],
+  obsidianSyncWarningShown: false,
 };
 
 describe("SyncManager", () => {
@@ -623,6 +624,7 @@ function localCommitPlan(remoteSha: string, path: string): SyncPlan {
     acknowledgedDirtyPaths: [path],
     conflictPaths: [],
     conflictRecords: [],
+    mergedPaths: [],
   };
 }
 
@@ -642,6 +644,7 @@ function remoteOnlyPlan(remoteSha: string, operations: MaterializeOperation[]): 
     acknowledgedDirtyPaths: [],
     conflictPaths: [],
     conflictRecords: [],
+    mergedPaths: [],
   };
 }
 

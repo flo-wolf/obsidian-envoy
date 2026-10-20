@@ -22,6 +22,7 @@ export const DEFAULT_SETTINGS: GitLabSyncSettings = {
   conflictStrategy: "auto-remote",
   lockBeforeManualSync: true,
   deviceSpecificPaths: [],
+  obsidianSyncWarningShown: false,
 };
 
 export const DEFAULT_STATE: LocalSyncState = {

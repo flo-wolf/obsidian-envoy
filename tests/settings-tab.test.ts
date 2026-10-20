@@ -3,6 +3,7 @@ import { DEFAULT_SETTINGS, DEFAULT_STATE } from "../src/settings/settings";
 import GitLabSyncSettingsTab, { vaultSetupViewState } from "../src/settings/settings-tab";
 import { ConnectConfirmModal } from "../src/views/connect-confirm-modal";
 import type { ConnectPreview } from "../src/sync/bootstrap-service";
+import type { SyncHistoryEntry } from "../src/sync/types";
 import { MockElement } from "./helpers/mock-obsidian";
 
 describe("settings setup view state", () => {
@@ -52,6 +53,8 @@ function fakePlugin() {
     previewConnect: vi.fn(async (): Promise<ConnectPreview | null> => null),
     connect: vi.fn(async () => undefined),
     saveSettings: vi.fn(async () => undefined),
+    loadSyncHistory: vi.fn(async (): Promise<SyncHistoryEntry[]> => []),
+    clearSyncHistory: vi.fn(async () => undefined),
   };
 }
 
@@ -99,6 +102,31 @@ describe("settings tab render", () => {
     expect(token?.desc).toContain("Repository → Read");
     expect(token?.desc).toContain("Commit → Create");
     expect(token?.desc).toContain("api scope");
+  });
+
+  it("shows the sync history at the bottom, one block per sync", async () => {
+    const plugin = fakePlugin();
+    plugin.loadSyncHistory.mockResolvedValue([
+      {
+        at: Date.now(),
+        trigger: "manual",
+        status: "success",
+        pulled: [{ path: "from-mac.md", change: "changed" }],
+        pushed: [{ path: "from-phone.md", change: "added" }],
+        merged: ["both.md"],
+        conflicts: [],
+        held: [],
+      },
+    ]);
+    const container = renderTab(plugin);
+    await vi.waitFor(() => expect(container.textContent).toContain("from-mac.md"));
+
+    const text = container.textContent;
+    expect(text).toContain("Sync button");
+    expect(text).toContain("1 ↓  1 ↑ · 1 merged");
+    expect(text).toContain("Pulled to this device (1)");
+    expect(text).toContain("from-phone.md");
+    expect(text).toContain("both.md");
   });
 
   it("explains device-specific settings with the vault's config folder", () => {

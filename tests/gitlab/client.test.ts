@@ -40,6 +40,7 @@ const settings: GitLabSyncSettings = {
   conflictStrategy: "remote",
   lockBeforeManualSync: false,
   deviceSpecificPaths: [],
+  obsidianSyncWarningShown: false,
 };
 
 describe("GitLabClient", () => {

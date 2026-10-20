@@ -5,6 +5,8 @@ import { copyToClipboard } from "../utils";
 import { enclavePresence } from "../enclave/enclave-api";
 import { ConnectConfirmModal } from "../views/connect-confirm-modal";
 import { parseDeviceSpecificEntries } from "../sync/device-specific";
+import { renderSyncHistory } from "../views/sync-history-view";
+import { OBSIDIAN_SYNC_WARNING, obsidianSyncEnabled } from "../obsidian-sync";
 
 export interface VaultSetupViewState {
   initialized: boolean;
@@ -66,6 +68,17 @@ export default class GitLabSyncSettingsTab extends PluginSettingTab {
   display(): void {
     const { containerEl } = this;
     containerEl.empty();
+
+    // Shown for as long as Obsidian's own Sync is turned on.
+    const warningEl = containerEl.createDiv();
+    void obsidianSyncEnabled(this.app.vault).then((enabled) => {
+      if (enabled) {
+        new Setting(warningEl)
+          .setName("Obsidian Sync is turned on")
+          .setDesc(OBSIDIAN_SYNC_WARNING)
+          .setClass("envoy-warning-setting");
+      }
+    });
 
     new Setting(containerEl).setName("GitLab repository").setHeading();
 
@@ -453,5 +466,21 @@ export default class GitLabSyncSettingsTab extends PluginSettingTab {
       .addButton((button) =>
         button.setButtonText("Clean").onClick(() => this.plugin.logger.clean()),
       );
+
+    new Setting(containerEl).setName("Sync history").setHeading();
+    new Setting(containerEl)
+      .setDesc(
+        "The latest syncs on this device that changed something or failed, newest first. " +
+          "Open one to see which files were pulled, pushed or merged. Syncs that found nothing to do aren't listed.",
+      )
+      .addButton((button) =>
+        button.setButtonText("Clear").onClick(async () => {
+          await this.plugin.clearSyncHistory();
+          historyEl.empty();
+          renderSyncHistory(historyEl, []);
+        }),
+      );
+    const historyEl = containerEl.createDiv({ cls: "envoy-history" });
+    void this.plugin.loadSyncHistory().then((history) => renderSyncHistory(historyEl, history));
   }
 }

@@ -39,6 +39,8 @@ export interface GitLabSyncSettings {
    * relative to the config folder. Stored with Envoy's settings, which never sync.
    */
   deviceSpecificPaths: string[];
+  /** Whether this device was already told that Obsidian Sync is also turned on. */
+  obsidianSyncWarningShown: boolean;
 }
 
 /**
@@ -102,6 +104,35 @@ export interface LocalSyncState {
    * last matched the synced version, so a sync only re-reads the ones that changed.
    */
   hiddenFiles?: Record<string, { mtime: number; size: number }>;
+  /** The latest syncs that changed something or failed, newest first. */
+  syncHistory?: SyncHistoryEntry[];
+}
+
+export interface SyncHistoryFile {
+  path: string;
+  change: "added" | "changed" | "deleted";
+}
+
+/** One sync, as shown in the settings' sync history. */
+export interface SyncHistoryEntry {
+  at: number;
+  trigger: string;
+  status: "success" | "conflict" | "error";
+  error?: string;
+  /** How often this error happened in a row. */
+  repeated?: number;
+  /** Written to or deleted from this vault. */
+  pulled: SyncHistoryFile[];
+  /** Created, changed or deleted on GitLab. */
+  pushed: SyncHistoryFile[];
+  /** Changed on both sides and combined automatically. */
+  merged: string[];
+  /** Changed on both sides; the other version sits in a copy. */
+  conflicts: Array<{ path: string; copyPath: string }>;
+  /** Unlocked notes not uploaded this time. */
+  held: string[];
+  /** Files not listed, to keep the history small. */
+  omitted?: number;
 }
 
 export interface PluginData {

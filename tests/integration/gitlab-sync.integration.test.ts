@@ -268,6 +268,51 @@ describe("GitLab sync integration", () => {
   }, 20_000);
 });
 
+describe("Sync history", () => {
+  beforeEach(() => {
+    requestUrlMock.mockReset();
+  });
+
+  it("records what each sync pulled, pushed and merged, and skips syncs that changed nothing", async () => {
+    const setup = await initializedFixture({
+      "shared.md": "one\ntwo\nthree\n",
+      "remote.md": "base",
+    });
+    await setup.writeDirty("local.md", "new here");
+    await setup.writeDirty("shared.md", "one changed here\ntwo\nthree\n");
+    await setup.server.desktopCommit({
+      "remote.md": "changed on desktop",
+      "shared.md": "one\ntwo\nthree changed there\n",
+    });
+    setup.settings.conflictStrategy = "auto-remote";
+
+    await setup.manager().sync("manual");
+    await setup.manager().sync("interval");
+
+    const history = (await setup.store.load()).state.syncHistory ?? [];
+    expect(history).toHaveLength(1);
+    expect(history[0]).toMatchObject({
+      trigger: "manual",
+      status: "success",
+      pushed: [{ path: "local.md", change: "added" }],
+      pulled: [{ path: "remote.md", change: "changed" }],
+      merged: ["shared.md"],
+      conflicts: [],
+    });
+  });
+
+  it("records a failed sync with its message", async () => {
+    const setup = await initializedFixture({ "note.md": "base" });
+
+    await setup.manager({ getToken: async () => null }).sync("manual");
+
+    const history = (await setup.store.load()).state.syncHistory ?? [];
+    expect(history).toHaveLength(1);
+    expect(history[0].status).toBe("error");
+    expect(history[0].error).toBeTruthy();
+  });
+});
+
 describe("Settings and dot-files, which Obsidian sends no file events for", () => {
   beforeEach(() => {
     requestUrlMock.mockReset();
@@ -891,6 +936,7 @@ function gitlabSettings(server: GitLabTestServer): GitLabSyncSettings {
     conflictStrategy: "remote",
     lockBeforeManualSync: false,
     deviceSpecificPaths: [],
+    obsidianSyncWarningShown: false,
   };
 }
 
