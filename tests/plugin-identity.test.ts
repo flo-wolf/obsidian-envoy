@@ -5,8 +5,8 @@ import versions from "../versions.json";
 
 describe("GitLab fork identity", () => {
   it("uses a new plugin id and GitLab-only name", () => {
-    expect(manifest.id).toBe("courier");
-    expect(manifest.name).toBe("Courier");
+    expect(manifest.id).toBe("envoy");
+    expect(manifest.name).toBe("Envoy");
     expect(manifest.description).toContain("GitLab");
     expect(manifest.description).not.toContain("GitHub");
   });

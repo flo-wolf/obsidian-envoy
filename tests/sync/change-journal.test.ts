@@ -145,8 +145,8 @@ describe("ChangeJournal", () => {
     const { vault } = fakeVault();
     const journal = new ChangeJournal({ vault: vault as any, stateStore: store });
 
-    await journal.recordUpsert(".obsidian/plugins/courier/main.js");
-    await journal.recordUpsert(".obsidian/courier.log");
+    await journal.recordUpsert(".obsidian/plugins/envoy/main.js");
+    await journal.recordUpsert(".obsidian/envoy.log");
     await journal.recordUpsert(".obsidian/github-sync-metadata.json");
     await journal.recordUpsert(".git/config");
 

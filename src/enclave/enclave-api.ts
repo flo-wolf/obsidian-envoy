@@ -1,7 +1,7 @@
 /*
- * Courier's side of the interface Enclave offers at
+ * Envoy's side of the interface Enclave offers at
  * `app.plugins.getPlugin("enclave").api`. A copy of Enclave's src/api.ts for the
- * version Courier understands; Courier never imports Enclave's code, so it works
+ * version Envoy understands; Envoy never imports Enclave's code, so it works
  * the same whether Enclave is installed or not.
  */
 
@@ -51,10 +51,10 @@ function registry(app: App | undefined): PluginRegistry | undefined {
 
 /**
  * How Enclave is present in this vault:
- * - "absent": not enabled, so only Courier's own content check applies;
- * - "ready": enabled, loaded, and offering an API version Courier understands;
- * - "unavailable": enabled but not loaded yet, or an API Courier doesn't know.
- *   Courier then doesn't sync at all, rather than guess what's safe to upload.
+ * - "absent": not enabled, so only Envoy's own content check applies;
+ * - "ready": enabled, loaded, and offering an API version Envoy understands;
+ * - "unavailable": enabled but not loaded yet, or an API Envoy doesn't know.
+ *   Envoy then doesn't sync at all, rather than guess what's safe to upload.
  */
 export type EnclavePresence =
   | { state: "absent" }
@@ -73,7 +73,7 @@ export function enclavePresence(app: App | undefined): EnclavePresence {
   if (api.version !== SUPPORTED_ENCLAVE_API_VERSION) {
     return {
       state: "unavailable",
-      reason: `Enclave offers API version ${String(api.version)}; this Courier understands version ${SUPPORTED_ENCLAVE_API_VERSION}. Update Courier and Enclave.`,
+      reason: `Enclave offers API version ${String(api.version)}; this Envoy understands version ${SUPPORTED_ENCLAVE_API_VERSION}. Update Envoy and Enclave.`,
     };
   }
   return { state: "ready", api: api as EnclaveApi };

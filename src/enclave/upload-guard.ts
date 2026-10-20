@@ -1,5 +1,5 @@
 /*
- * Decides which notes Courier must not upload right now, so the plain text of a
+ * Decides which notes Envoy must not upload right now, so the plain text of a
  * note Enclave encrypts never reaches GitLab (or its history).
  *
  * Two independent layers, and when in doubt, a note is held back:
@@ -8,7 +8,7 @@
  * 2. A content check that needs no Enclave: a note that was locked when last
  *    synced and is plain now is only uploaded if Enclave confirms it was made
  *    plain on purpose.
- * If Enclave is enabled but not ready (still loading, or an API version Courier
+ * If Enclave is enabled but not ready (still loading, or an API version Envoy
  * doesn't know), the sync doesn't run at all.
  */
 
@@ -17,7 +17,7 @@ import { enclavePresence, type EnclaveApi, type EnclaveHoldReason, type EnclaveP
 import { isEnclaveLocked } from "./locked-format";
 import type { App } from "obsidian";
 
-/** Why a note is held back: Enclave's reasons, plus Courier's own content check. */
+/** Why a note is held back: Enclave's reasons, plus Envoy's own content check. */
 export type HoldReason = EnclaveHoldReason | "locked-turned-plain";
 
 export interface HeldNote {

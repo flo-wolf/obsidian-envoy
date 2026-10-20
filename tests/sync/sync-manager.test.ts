@@ -293,7 +293,7 @@ describe("SyncManager", () => {
       localFiles: {
         "note.md": "note",
         "Welcome.md": "welcome",
-        ".obsidian/plugins/courier/main.js": "runtime",
+        ".obsidian/plugins/envoy/main.js": "runtime",
         "secret.md": "secret",
       },
     });

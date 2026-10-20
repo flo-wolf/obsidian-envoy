@@ -34,7 +34,7 @@ export class LocalMaterializer {
   private readonly now: () => number;
 
   constructor(private options: LocalMaterializerOptions) {
-    this.pluginId = options.pluginId ?? "courier";
+    this.pluginId = options.pluginId ?? "envoy";
     this.now = options.now ?? Date.now;
   }
 
@@ -201,7 +201,7 @@ export class LocalMaterializer {
     return (
       path === ".git" ||
       path.startsWith(".git/") ||
-      path === `${configDir}/courier.log` ||
+      path === `${configDir}/envoy.log` ||
       isMetadataPath(path) ||
       path === `${configDir}/plugins/${this.pluginId}` ||
       path.startsWith(runtimeDir)
@@ -213,7 +213,7 @@ export class LocalMaterializer {
     const slash = normalized.lastIndexOf("/");
     const directory = slash === -1 ? "" : `${normalized.slice(0, slash + 1)}`;
     const fileName = slash === -1 ? normalized : normalized.slice(slash + 1);
-    return `${directory}.${fileName}.courier-${this.now().toString(36)}.tmp`;
+    return `${directory}.${fileName}.envoy-${this.now().toString(36)}.tmp`;
   }
 }
 

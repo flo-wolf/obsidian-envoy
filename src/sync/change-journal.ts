@@ -29,7 +29,7 @@ export class ChangeJournal {
   private entries: Record<string, DirtyEntry> = {};
 
   constructor(private options: ChangeJournalOptions) {
-    this.pluginId = options.pluginId ?? "courier";
+    this.pluginId = options.pluginId ?? "envoy";
     this.now = options.now ?? Date.now;
   }
 
@@ -151,7 +151,7 @@ export class ChangeJournal {
     return (
       path === ".git" ||
       path.startsWith(".git/") ||
-      path === `${configDir}/courier.log` ||
+      path === `${configDir}/envoy.log` ||
       isMetadataPath(path) ||
       path === `${configDir}/plugins/${this.pluginId}` ||
       path.startsWith(runtimeDir)

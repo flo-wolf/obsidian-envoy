@@ -1,16 +1,16 @@
-# Courier
+# Envoy
 
 **Sync an Obsidian vault with a GitLab repository, on desktop and mobile, without Git on the device.**
 
-Courier keeps a vault and one branch of a GitLab repository in sync through GitLab's REST API, so it
+Envoy keeps a vault and one branch of a GitLab repository in sync through GitLab's REST API, so it
 works the same on Windows, macOS, Linux, iPhone and Android. Every sync is an ordinary Git commit, so
 the full history is on GitLab and the repository works with a normal desktop Git workflow too.
 
-Courier works with [Enclave](https://github.com/flo-wolf/obsidian-enclave): notes Enclave encrypts
+Envoy works with [Enclave](https://github.com/flo-wolf/obsidian-enclave): notes Enclave encrypts
 are only ever uploaded locked, never as plain text, and conflicts between locked notes can still be
 merged. See [Working with Enclave](#working-with-enclave).
 
-Courier is a fork of [GitLab Gitless Sync](https://github.com/TerekhinAO/obsidian-gitlab-sync) by
+Envoy is a fork of [GitLab Gitless Sync](https://github.com/TerekhinAO/obsidian-gitlab-sync) by
 Alexander Terekhin, itself based on GitHub Gitless Sync by Silvano Cerza.
 
 ## What you get
@@ -37,13 +37,13 @@ Requires Obsidian 1.11.4 or newer.
 ### Community plugins
 
 Once available in the Obsidian Community Plugins registry: open **Settings → Community plugins →
-Browse**, search for **Courier**, install and enable it.
+Browse**, search for **Envoy**, install and enable it.
 
 ### Manual
 
 Download `main.js`, `manifest.json`, and `styles.css` from the
-[latest release](https://github.com/flo-wolf/obsidian-courier/releases/latest) and copy them
-into `<vault>/.obsidian/plugins/courier/`, then enable the plugin.
+[latest release](https://github.com/flo-wolf/obsidian-envoy/releases/latest) and copy them
+into `<vault>/.obsidian/plugins/envoy/`, then enable the plugin.
 
 ## Getting started
 
@@ -80,7 +80,7 @@ the old token and create a new one.
 **Back up the vault before connecting.** The plugin never deletes a file and never overwrites one
 side silently, but connecting does bring remote content into the vault.
 
-Fill in **Settings → Courier → GitLab repository**:
+Fill in **Settings → Envoy → GitLab repository**:
 
 - **GitLab base URL** — `https://gitlab.com`, or your self-managed HTTPS instance
   (e.g. `https://gitlab.example.com`). HTTPS is required.
@@ -112,7 +112,7 @@ icon or command palette) syncs on demand at any time.
 
 ### Step 3 — Turn on automatic sync
 
-All automatic modes live under **Settings → Courier → Sync** and are off-by-default
+All automatic modes live under **Settings → Envoy → Sync** and are off-by-default
 except *Sync on startup*. Pick the set that matches the device.
 
 **On desktop — sync by time.** The desktop app stays open for hours, so time-based triggers are what
@@ -141,7 +141,7 @@ events cannot stack up syncs.
 
 ### Step 4 — Add a `.gitignore`
 
-The plugin excludes only its own runtime folder (`.obsidian/plugins/courier/`), its log,
+The plugin excludes only its own runtime folder (`.obsidian/plugins/envoy/`), its log,
 the `.git` directory, and sync-metadata files. **Everything else — including the rest of
 `.obsidian/` — is synced unless you ignore it.** So on a new vault, create a `.gitignore` in the
 vault root.
@@ -200,7 +200,7 @@ are never committed, so the repository stays clean and devices never fight over 
 ## Resolving conflicts
 
 A conflict is a file changed on this device and on GitLab before either side synced, in ways the
-automatic merge couldn't combine. Courier keeps one version at the file's path and the other in a
+automatic merge couldn't combine. Envoy keeps one version at the file's path and the other in a
 copy next to it, named `<name> — conflict <device> <date>`, and records the conflict.
 
 Run **Resolve sync conflicts**, or just sync by hand: a manual sync that finds conflicts opens the
@@ -217,7 +217,7 @@ later** leaves everything as it is.
 ## Working with Enclave
 
 [Enclave](https://github.com/flo-wolf/obsidian-enclave) encrypts notes and folders. An unlocked
-note's plain text is on disk while you work on it, so a sync tool could upload it. Courier never
+note's plain text is on disk while you work on it, so a sync tool could upload it. Envoy never
 does:
 
 - **Unlocked notes are held back.** The note's last locked version stays on GitLab. Once Enclave
@@ -227,8 +227,8 @@ does:
   too.
 - **A second check works without Enclave.** A note that was locked when last synced and is plain
   now is only uploaded if Enclave confirms you decrypted it on purpose. If Enclave is enabled but
-  hasn't finished loading, Courier doesn't sync at all rather than guess.
-- **Changes from other devices wait for unlocked notes.** Courier doesn't overwrite a note you have
+  hasn't finished loading, Envoy doesn't sync at all rather than guess.
+- **Changes from other devices wait for unlocked notes.** Envoy doesn't overwrite a note you have
   open in plain text. The change is applied once the note is locked; if you changed it too, you get a
   conflict to resolve, nothing is lost.
 - **Lock all notes before syncing.** With this setting (on by default, only shown when Enclave is
@@ -318,7 +318,7 @@ and access token are required.
 
 ## Credits & License
 
-Courier is a fork of [GitLab Gitless Sync](https://github.com/TerekhinAO/obsidian-gitlab-sync) by
+Envoy is a fork of [GitLab Gitless Sync](https://github.com/TerekhinAO/obsidian-gitlab-sync) by
 Alexander Terekhin, an independently maintained GitLab rewrite of
 [GitHub Gitless Sync](https://github.com/silvanocerza/github-gitless-sync) by Silvano Cerza.
 Enclave support, the conflict window, and related changes by Florian Wolf, 2026.

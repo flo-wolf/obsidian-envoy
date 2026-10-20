@@ -204,22 +204,22 @@ describe("LocalMaterializer", () => {
   it("does not overwrite or delete the plugin runtime directory", async () => {
     const fixture = materializer({
       initialFiles: {
-        ".obsidian/plugins/courier/main.js": bytes("runtime"),
+        ".obsidian/plugins/envoy/main.js": bytes("runtime"),
       },
     });
 
     await expect(fixture.materializer.apply([
       {
         type: "write",
-        path: ".obsidian/plugins/courier/main.js",
+        path: ".obsidian/plugins/envoy/main.js",
         contentBase64: base64("remote"),
       },
     ])).rejects.toThrow("Cannot materialize hard-excluded path");
     await expect(fixture.materializer.apply([
-      { type: "delete", path: ".obsidian/plugins/courier/main.js" },
+      { type: "delete", path: ".obsidian/plugins/envoy/main.js" },
     ])).rejects.toThrow("Cannot materialize hard-excluded path");
 
-    expect(fixture.read(".obsidian/plugins/courier/main.js")).toEqual(bytes("runtime"));
+    expect(fixture.read(".obsidian/plugins/envoy/main.js")).toEqual(bytes("runtime"));
   });
 
   it("removes parent folders left empty by a delete", async () => {

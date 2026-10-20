@@ -8,7 +8,7 @@ describe("GitLab settings persistence", () => {
     const app = {
       secretStorage: new Map<string, string>(),
     };
-    app.secretStorage.set("courier-token", "glpat-test");
+    app.secretStorage.set("envoy-token", "glpat-test");
 
     const store = new StateStore({
       loadData: async () => null,
@@ -22,7 +22,7 @@ describe("GitLab settings persistence", () => {
 
     expect(JSON.stringify(savedData)).not.toContain("glpat-");
     expect((savedData as any).settings.tokenSecretName).toBe(
-      "courier-token",
+      "envoy-token",
     );
   });
 

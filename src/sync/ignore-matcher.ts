@@ -23,7 +23,7 @@ export class IgnoreMatcher {
 
   constructor(
     private vault: IgnoreVault,
-    private pluginId = "courier",
+    private pluginId = "envoy",
   ) {}
 
   async reload(): Promise<void> {
@@ -97,7 +97,7 @@ export class IgnoreMatcher {
     return (
       path === ".git" ||
       path.startsWith(".git/") ||
-      path === `${configDir}/courier.log` ||
+      path === `${configDir}/envoy.log` ||
       isMetadataPath(path) ||
       path === `${configDir}/plugins/${this.pluginId}` ||
       path.startsWith(runtimeDir)

@@ -57,7 +57,7 @@ export class BootstrapService {
   private readonly pluginId: string;
 
   constructor(private options: BootstrapServiceOptions) {
-    this.pluginId = options.pluginId ?? "courier";
+    this.pluginId = options.pluginId ?? "envoy";
   }
 
   async merge(): Promise<ConnectMergeResult> {

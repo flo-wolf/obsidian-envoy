@@ -115,11 +115,11 @@ export default class GitLabSyncSettingsTab extends PluginSettingTab {
       .setDesc("Local SecretStorage key used for the GitLab token")
       .addText((text) =>
         text
-          .setPlaceholder("courier-token")
+          .setPlaceholder("envoy-token")
           .setValue(this.plugin.settings.tokenSecretName)
           .onChange(async (value) => {
             this.plugin.settings.tokenSecretName =
-              value.trim() || "courier-token";
+              value.trim() || "envoy-token";
             await this.plugin.saveSettings();
           }),
       );

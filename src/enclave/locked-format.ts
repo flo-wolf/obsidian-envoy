@@ -1,6 +1,6 @@
 /*
  * Recognizes notes locked by Enclave (https://github.com/flo-wolf/obsidian-enclave)
- * from their content alone, so Courier can protect them even when Enclave isn't
+ * from their content alone, so Envoy can protect them even when Enclave isn't
  * installed or loaded. Mirrors Enclave's own check: the leading frontmatter
  * holds `locked: true`, and an ```enclave block holds an AES-GCM payload.
  */

@@ -1038,13 +1038,13 @@ export class SyncManager {
     }
     const normalized = normalizePath(path);
     const configDir = normalizePath(vault.configDir);
-    const runtimeDir = `${configDir}/plugins/courier/`;
+    const runtimeDir = `${configDir}/plugins/envoy/`;
     return (
       normalized === ".git" ||
       normalized.startsWith(".git/") ||
-      normalized === `${configDir}/courier.log` ||
+      normalized === `${configDir}/envoy.log` ||
       isMetadataPath(normalized) ||
-      normalized === `${configDir}/plugins/courier` ||
+      normalized === `${configDir}/plugins/envoy` ||
       normalized.startsWith(runtimeDir)
     );
   }

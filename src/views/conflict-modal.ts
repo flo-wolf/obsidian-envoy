@@ -26,7 +26,7 @@ export class ConflictModal extends Modal {
   }
 
   onOpen(): void {
-    this.modalEl.addClass("courier-conflict-modal");
+    this.modalEl.addClass("envoy-conflict-modal");
     this.titleEl.setText(`Resolve conflict: ${noteName(this.conflict.record)}`);
     this.render();
   }
@@ -58,18 +58,18 @@ export class ConflictModal extends Modal {
     });
     if (!hasBase) {
       contentEl.createEl("p", {
-        cls: "courier-conflict-hint",
+        cls: "envoy-conflict-hint",
         text: "The last synced version couldn't be loaded, so every difference is shown as a choice.",
       });
     }
     if (locked) {
       contentEl.createEl("p", {
-        cls: "courier-conflict-hint",
+        cls: "envoy-conflict-hint",
         text: "This note is locked. Its versions are decrypted only in memory, and the result is locked again before it's saved.",
       });
     }
 
-    const list = contentEl.createDiv({ cls: "courier-conflict-chunks" });
+    const list = contentEl.createDiv({ cls: "envoy-conflict-chunks" });
     let conflictIndex = 0;
     chunks.forEach((chunk, position) => {
       if (chunk.kind === "conflict") {
@@ -99,12 +99,12 @@ export class ConflictModal extends Modal {
 
   private renderConflict(parent: HTMLElement, chunk: Extract<MergeChunk, { kind: "conflict" }>, index: number): void {
     const choice = this.choices[index];
-    const box = parent.createDiv({ cls: "courier-chunk courier-chunk-conflict" });
-    const sides = box.createDiv({ cls: "courier-conflict-sides" });
+    const box = parent.createDiv({ cls: "envoy-chunk envoy-chunk-conflict" });
+    const sides = box.createDiv({ cls: "envoy-conflict-sides" });
     renderSide(sides, "This device", chunk.mine, choice === "mine" || choice === "both");
     renderSide(sides, "GitLab", chunk.theirs, choice === "theirs" || choice === "both");
 
-    const buttons = new Setting(box).setClass("courier-conflict-choice");
+    const buttons = new Setting(box).setClass("envoy-conflict-choice");
     const options: [ChunkChoice, string][] = [
       ["mine", "Use this device's"],
       ["theirs", "Use GitLab's"],
@@ -124,7 +124,7 @@ export class ConflictModal extends Modal {
   }
 
   private renderActions(merged: string | null): void {
-    const actions = new Setting(this.contentEl).setClass("courier-conflict-actions");
+    const actions = new Setting(this.contentEl).setClass("envoy-conflict-actions");
     actions.addButton((button) =>
       button.setButtonText("Keep this device's version").onClick(() => void this.finish(() => this.service.keepSide(this.conflict, "mine"))),
     );
@@ -197,23 +197,23 @@ export class ConflictListModal extends Modal {
 }
 
 function renderSide(parent: HTMLElement, label: string, lines: string[], chosen: boolean): void {
-  const side = parent.createDiv({ cls: `courier-conflict-side${chosen ? " is-chosen" : ""}` });
-  side.createDiv({ cls: "courier-conflict-side-label", text: label });
+  const side = parent.createDiv({ cls: `envoy-conflict-side${chosen ? " is-chosen" : ""}` });
+  side.createDiv({ cls: "envoy-conflict-side-label", text: label });
   side.createEl("pre", { text: lines.length > 0 ? lines.join("\n") : "(removed)" });
 }
 
 /** Unchanged or automatically merged text; long unchanged stretches are shortened. */
 function renderSettled(parent: HTMLElement, chunk: Exclude<MergeChunk, { kind: "conflict" }>, first: boolean, last: boolean): void {
   if (chunk.kind === "auto") {
-    const box = parent.createDiv({ cls: "courier-chunk courier-chunk-auto" });
+    const box = parent.createDiv({ cls: "envoy-chunk envoy-chunk-auto" });
     box.createDiv({
-      cls: "courier-chunk-label",
+      cls: "envoy-chunk-label",
       text: chunk.from === "mine" ? "Changed on this device" : chunk.from === "theirs" ? "Changed on GitLab" : "Changed the same way on both",
     });
     box.createEl("pre", { text: chunk.lines.length > 0 ? chunk.lines.join("\n") : "(removed)" });
     return;
   }
-  const box = parent.createDiv({ cls: "courier-chunk courier-chunk-same" });
+  const box = parent.createDiv({ cls: "envoy-chunk envoy-chunk-same" });
   const { lines } = chunk;
   const keep = CONTEXT_LINES;
   if (lines.length <= keep * 2 + 1) {
@@ -225,7 +225,7 @@ function renderSettled(parent: HTMLElement, chunk: Exclude<MergeChunk, { kind: "
   const tail = last ? [] : lines.slice(-keep);
   if (head.length > 0) box.createEl("pre", { text: head.join("\n") });
   box.createDiv({
-    cls: "courier-chunk-skipped",
+    cls: "envoy-chunk-skipped",
     text: `${lines.length - head.length - tail.length} unchanged lines`,
   });
   if (tail.length > 0) box.createEl("pre", { text: tail.join("\n") });

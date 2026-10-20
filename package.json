@@ -1,5 +1,5 @@
 {
-  "name": "courier",
+  "name": "envoy",
   "version": "0.1.0",
   "description": "Sync a vault with a GitLab repository without Git, on desktop and mobile. Works with Enclave: notes are only ever uploaded locked.",
   "main": "main.js",

@@ -117,12 +117,12 @@ describe("IgnoreMatcher", () => {
 
   it("hard-excludes plugin runtime paths regardless of negation", async () => {
     const matcher = new IgnoreMatcher(fakeVault({
-      ".gitignore": "!.obsidian/plugins/courier/main.js",
+      ".gitignore": "!.obsidian/plugins/envoy/main.js",
     }));
     await matcher.reload();
 
     expect(
-      matcher.isIgnored(".obsidian/plugins/courier/main.js", {}),
+      matcher.isIgnored(".obsidian/plugins/envoy/main.js", {}),
     ).toBe(true);
     expect(matcher.isIgnored(".git/config", {})).toBe(true);
   });

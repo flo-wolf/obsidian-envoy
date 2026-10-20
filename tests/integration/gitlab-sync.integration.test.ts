@@ -35,12 +35,12 @@ describe("GitLab sync integration", () => {
     const setup = await initializedFixture({
       "folder/note.md": "hello",
       "unicode/Привет 😀.md": "emoji",
-      ".obsidian/plugins/courier/main.js": "remote plugin is skipped",
+      ".obsidian/plugins/envoy/main.js": "remote plugin is skipped",
     });
 
     expect(setup.vault.text("folder/note.md")).toBe("hello");
     expect(setup.vault.text("unicode/Привет 😀.md")).toBe("emoji");
-    expect(setup.vault.text(".obsidian/plugins/courier/main.js")).toBe("local plugin");
+    expect(setup.vault.text(".obsidian/plugins/envoy/main.js")).toBe("local plugin");
 
     const tree = await setup.server.tree();
     const state = (await setup.store.load()).state;
@@ -48,7 +48,7 @@ describe("GitLab sync integration", () => {
     expect(state.lastSyncedCommitSha).toBe(setup.server.head);
     expect(Object.keys(state.trackedFiles).sort()).toEqual(
       tree
-        .filter((item) => item.path !== ".obsidian/plugins/courier/main.js")
+        .filter((item) => item.path !== ".obsidian/plugins/envoy/main.js")
         .map((item) => item.path)
         .sort(),
     );
@@ -465,7 +465,7 @@ async function initializedFixture(initialRemoteFiles: Record<string, string | Ui
   requestUrlMock.mockImplementation(server.requestUrl.bind(server));
   const settings = gitlabSettings(server);
   const vault = new MemoryVault({
-    ".obsidian/plugins/courier/main.js": bytes("local plugin"),
+    ".obsidian/plugins/envoy/main.js": bytes("local plugin"),
   });
   const store = pluginStore(pluginData(settings));
   const journal = journalFor(store);
@@ -540,7 +540,7 @@ class MemoryVault {
   };
 
   private files = new Map<string, Uint8Array>();
-  private folders = new Set<string>(["", ".obsidian", ".obsidian/plugins", ".obsidian/plugins/courier"]);
+  private folders = new Set<string>(["", ".obsidian", ".obsidian/plugins", ".obsidian/plugins/envoy"]);
 
   constructor(files: Record<string, Uint8Array> = {}) {
     for (const [path, content] of Object.entries(files)) {

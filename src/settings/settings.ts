@@ -6,7 +6,7 @@ export const DEFAULT_SETTINGS: GitLabSyncSettings = {
   gitlabBaseUrl: "https://gitlab.com",
   projectPath: "",
   branch: "main",
-  tokenSecretName: "courier-token",
+  tokenSecretName: "envoy-token",
   authorName: "",
   authorEmail: "",
   syncOnStartup: true,
