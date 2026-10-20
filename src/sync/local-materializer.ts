@@ -71,6 +71,7 @@ export class LocalMaterializer {
       for (const path of transaction.acknowledgedDirtyPaths) {
         delete nextData.state.dirtyEntries[normalizePath(path)];
       }
+      nextData.state.conflicts = [...(nextData.state.conflicts ?? []), ...(transaction.conflicts ?? [])];
       nextData.state.pendingTransaction = null;
       nextData.state.lastSyncAt = this.now();
       nextData.state.lastSyncResult = transaction.conflictPaths.length > 0 ? "conflict" : "success";

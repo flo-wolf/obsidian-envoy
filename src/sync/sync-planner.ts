@@ -6,7 +6,7 @@ import {
 } from "./conflict-resolver";
 import type { LocalSnapshotEntry } from "./local-snapshot";
 import type { RemoteChange } from "./remote-diff";
-import type { ConflictStrategy, DirtyEntry, MaterializeOperation, TrackedFile } from "./types";
+import type { ConflictRecord, ConflictStrategy, DirtyEntry, MaterializeOperation, TrackedFile } from "./types";
 
 export interface SyncPlan {
   basedOnRemoteSha: string;
@@ -16,6 +16,7 @@ export interface SyncPlan {
   nextTrackedFiles: Record<string, TrackedFile>;
   acknowledgedDirtyPaths: string[];
   conflictPaths: string[];
+  conflictRecords: ConflictRecord[];
 }
 
 interface SyncPlannerOptions {
@@ -108,6 +109,7 @@ export class SyncPlanner {
         .map((snapshot) => snapshot.path)
         .filter((path) => dirtyPaths.has(path)),
       conflictPaths: conflictPlan.conflictPaths,
+      conflictRecords: conflictPlan.conflictRecords,
     };
   }
 

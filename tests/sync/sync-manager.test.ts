@@ -614,6 +614,7 @@ function localCommitPlan(remoteSha: string, path: string): SyncPlan {
     nextTrackedFiles: { [path]: tracked("local") },
     acknowledgedDirtyPaths: [path],
     conflictPaths: [],
+    conflictRecords: [],
   };
 }
 
@@ -632,6 +633,7 @@ function remoteOnlyPlan(remoteSha: string, operations: MaterializeOperation[]): 
       : {},
     acknowledgedDirtyPaths: [],
     conflictPaths: [],
+    conflictRecords: [],
   };
 }
 

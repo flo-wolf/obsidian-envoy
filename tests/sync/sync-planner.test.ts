@@ -28,6 +28,7 @@ describe("SyncPlanner", () => {
       nextTrackedFiles: { "note.md": tracked("A") },
       acknowledgedDirtyPaths: ["note.md"],
       conflictPaths: [],
+      conflictRecords: [],
     });
   });
 
@@ -334,40 +335,15 @@ function base64(text: string): string {
   return Buffer.from(text).toString("base64");
 }
 
+/** A conflict copy holds the other side's version as is. */
 function report(
-  path: string,
-  keptAtOriginalPath: string,
+  _path: string,
+  _keptAtOriginalPath: string,
   conflictCopyContains: string,
   localText: string,
   remoteText: string,
 ): string {
-  return [
-    "# Sync conflict",
-    "",
-    `Original path: \`${path}\``,
-    `Kept at original path: ${keptAtOriginalPath}`,
-    `Conflict copy contains: ${conflictCopyContains}`,
-    "",
-    "## Diff",
-    "",
-    "```diff",
-    `- GitLab: ${remoteText}`,
-    `+ iPhone: ${localText}`,
-    "```",
-    "",
-    "## iPhone version",
-    "",
-    "```markdown",
-    localText,
-    "```",
-    "",
-    "## GitLab version",
-    "",
-    "```markdown",
-    remoteText,
-    "```",
-    "",
-  ].join("\n");
+  return conflictCopyContains === "GitLab" ? remoteText : localText;
 }
 
 function blobId(value: Uint8Array): string {

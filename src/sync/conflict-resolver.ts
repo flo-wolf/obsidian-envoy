@@ -1,7 +1,7 @@
 import { isEnclaveLocked } from "../enclave/locked-format";
 import type { GitLabCommitAction } from "../gitlab/types";
 import type { LocalSnapshotEntry, VersionState } from "./local-snapshot";
-import type { ConflictStrategy, MaterializeOperation, TrackedFile } from "./types";
+import type { ConflictRecord, ConflictStrategy, MaterializeOperation, TrackedFile } from "./types";
 
 export type { LocalSnapshotEntry, VersionState } from "./local-snapshot";
 
@@ -9,6 +9,7 @@ export interface ConflictResolutionPlan {
   commitActions: GitLabCommitAction[];
   materializeOperations: MaterializeOperation[];
   conflictPaths: string[];
+  conflictRecords: ConflictRecord[];
   nextIndexMutations: Array<
     | { type: "set"; path: string; file: TrackedFile }
     | { type: "delete"; path: string }
@@ -39,6 +40,7 @@ export class ConflictResolver {
       commitActions: [],
       materializeOperations: [],
       conflictPaths: [],
+      conflictRecords: [],
       nextIndexMutations: [],
     };
     const occupied = new Set<string>([
@@ -105,6 +107,7 @@ export class ConflictResolver {
       occupied,
       plan,
       fallbackStrategy(this.strategy),
+      base.exists && base.bytes !== null ? await calculateGitBlobId(base.bytes) : null,
     );
   }
 
@@ -129,6 +132,7 @@ export class ConflictResolver {
       occupied,
       plan,
       fallbackStrategy(this.strategy),
+      null,
     );
   }
 }
@@ -180,9 +184,10 @@ async function preserveBoth(
   occupied: Set<string>,
   plan: ConflictResolutionPlan,
   strategy: ConflictStrategy,
+  baseBlobId: string | null,
 ): Promise<void> {
   if (strategy === "local") {
-    await preserveBothLocalFirst(path, local, remote, now, deviceName, occupied, plan);
+    await preserveBothLocalFirst(path, local, remote, now, deviceName, occupied, plan, baseBlobId);
     return;
   }
 
@@ -208,6 +213,9 @@ async function preserveBoth(
     occupied,
     plan,
   );
+  if (remote.exists) {
+    plan.conflictRecords.push({ path, copyPath, keptSide: "remote", baseBlobId, createdAt: now.getTime() });
+  }
 }
 
 async function preserveBothLocalFirst(
@@ -218,6 +226,7 @@ async function preserveBothLocalFirst(
   deviceName: string,
   occupied: Set<string>,
   plan: ConflictResolutionPlan,
+  baseBlobId: string | null,
 ): Promise<void> {
   await commitOriginal(path, local, remote.exists, plan);
 
@@ -227,6 +236,9 @@ async function preserveBothLocalFirst(
     occupied,
   );
   await addCreatedConflict(copyPath, copyBytes, occupied, plan);
+  if (remote.exists && local.exists) {
+    plan.conflictRecords.push({ path, copyPath, keptSide: "local", baseBlobId, createdAt: now.getTime() });
+  }
 }
 
 function materialize(
@@ -377,61 +389,9 @@ function conflictCopyBytes(
     return new TextEncoder().encode(deletedSideMarker(path, keptSide, deviceName));
   }
 
-  if (!isProbablyText(path, copy.bytes) || (original.exists && original.bytes !== null && !isProbablyText(path, original.bytes))) {
-    return copy.bytes;
-  }
-
-  // A locked note's copy must stay a locked note Enclave can open, not a report
-  // wrapping its encrypted text.
-  if (isEnclaveLocked(path, copy.bytes) || isEnclaveLocked(path, original.bytes)) {
-    return copy.bytes;
-  }
-
-  return new TextEncoder().encode(conflictReport(path, copy, original, keptSide, deviceName));
-}
-
-function conflictReport(
-  path: string,
-  copy: VersionState,
-  original: VersionState,
-  keptSide: ConflictStrategy,
-  deviceName: string,
-): string {
-  const copySide = keptSide === "remote" ? deviceName : "GitLab";
-  const keptLabel = keptSide === "remote" ? "GitLab" : deviceName;
-  const localText = keptSide === "remote"
-    ? versionText(copy)
-    : versionText(original);
-  const remoteText = keptSide === "remote"
-    ? versionText(original)
-    : versionText(copy);
-
-  return [
-    "# Sync conflict",
-    "",
-    `Original path: \`${path}\``,
-    `Kept at original path: ${keptLabel}`,
-    `Conflict copy contains: ${copySide}`,
-    "",
-    "## Diff",
-    "",
-    "```diff",
-    ...diffLines(remoteText, localText, deviceName),
-    "```",
-    "",
-    `## ${deviceName} version`,
-    "",
-    "```markdown",
-    localText,
-    "```",
-    "",
-    "## GitLab version",
-    "",
-    "```markdown",
-    remoteText,
-    "```",
-    "",
-  ].join("\n");
+  // The copy is the other side's version itself: the conflict window compares
+  // the two, and a locked note's copy stays a locked note Enclave can open.
+  return copy.bytes;
 }
 
 function deletedSideMarker(path: string, keptSide: ConflictStrategy, deviceName: string): string {
@@ -449,31 +409,6 @@ function deletedSideMarker(path: string, keptSide: ConflictStrategy, deviceName:
   ].join("\n");
 }
 
-function diffLines(remoteText: string, localText: string, deviceName: string): string[] {
-  const remoteLines = remoteText.split("\n");
-  const localLines = localText.split("\n");
-  const max = Math.max(remoteLines.length, localLines.length);
-  const lines: string[] = [];
-
-  for (let index = 0; index < max; index += 1) {
-    const remoteLine = remoteLines[index];
-    const localLine = localLines[index];
-    if (remoteLine === localLine) {
-      if (remoteLine !== undefined) {
-        lines.push(`  ${remoteLine}`);
-      }
-      continue;
-    }
-    if (remoteLine !== undefined) {
-      lines.push(`- GitLab: ${remoteLine}`);
-    }
-    if (localLine !== undefined) {
-      lines.push(`+ ${deviceName}: ${localLine}`);
-    }
-  }
-
-  return lines.length === 0 ? ["  No textual line differences found."] : lines;
-}
 
 function versionText(version: VersionState): string {
   if (!version.exists || version.bytes === null) {

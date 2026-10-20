@@ -36,6 +36,23 @@ export interface GitLabSyncSettings {
   lockBeforeManualSync: boolean;
 }
 
+/**
+ * A conflict the sync couldn't merge: the note keeps one side's version at its
+ * path and the other side's version sits in a copy next to it, until the user
+ * resolves it in the conflict window.
+ */
+export interface ConflictRecord {
+  /** The note; its file holds `keptSide`'s version. */
+  path: string;
+  /** The conflict copy, holding the other side's version. */
+  copyPath: string;
+  /** Which side's version stayed at `path`. */
+  keptSide: "local" | "remote";
+  /** Git blob id of the last synced version both sides started from, if known. */
+  baseBlobId: string | null;
+  createdAt: number;
+}
+
 export interface MaterializeOperation {
   type: "write" | "delete";
   path: string;
@@ -49,6 +66,8 @@ export interface PendingTransaction {
   nextTrackedFiles: Record<string, TrackedFile>;
   acknowledgedDirtyPaths: string[];
   conflictPaths: string[];
+  /** Conflicts to record once the transaction is applied. */
+  conflicts?: ConflictRecord[];
   createdAt: number;
 }
 
@@ -66,6 +85,8 @@ export interface LocalSyncState {
    * (open in plain text here). Looked at again on every sync until applied.
    */
   deferredPaths?: string[];
+  /** Conflicts waiting to be resolved in the conflict window. */
+  conflicts?: ConflictRecord[];
 }
 
 export interface PluginData {

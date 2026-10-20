@@ -565,7 +565,7 @@ export class SyncManager {
     }
 
     const planner = this.createPlanner(client, settings);
-    return await planner.plan({
+    const replanned = await planner.plan({
       baseSha,
       remoteSha: createdCommit.id,
       trackedFiles: plan.nextTrackedFiles,
@@ -574,6 +574,13 @@ export class SyncManager {
       localSnapshots: [],
       now: this.nowDate(),
     });
+    // The replan only covers what the created commit changed; this sync's own
+    // conflicts still stand.
+    return {
+      ...replanned,
+      conflictPaths: [...plan.conflictPaths, ...replanned.conflictPaths],
+      conflictRecords: [...plan.conflictRecords, ...replanned.conflictRecords],
+    };
   }
 
   private async applyRemoteOnlyPlan(
@@ -595,6 +602,7 @@ export class SyncManager {
       }
       data.state.pendingTransaction = null;
       data.state.deferredPaths = [...deferredPaths];
+      data.state.conflicts = [...(data.state.conflicts ?? []), ...plan.conflictRecords];
       data.state.lastSyncAt = this.now();
       data.state.lastSyncResult = plan.conflictPaths.length > 0 ? "conflict" : "success";
     });
@@ -619,6 +627,7 @@ export class SyncManager {
       nextTrackedFiles: cloneTrackedFiles(plan.nextTrackedFiles),
       acknowledgedDirtyPaths: [...plan.acknowledgedDirtyPaths],
       conflictPaths: [...plan.conflictPaths],
+      conflicts: [...plan.conflictRecords],
       createdAt: this.now(),
     };
   }
@@ -638,6 +647,7 @@ export class SyncManager {
       }
       data.state.pendingTransaction = null;
       data.state.deferredPaths = [...deferredPaths];
+      data.state.conflicts = [...(data.state.conflicts ?? []), ...(transaction.conflicts ?? [])];
       data.state.lastSyncAt = this.now();
       data.state.lastSyncResult = transaction.conflictPaths.length > 0 ? "conflict" : "success";
     });

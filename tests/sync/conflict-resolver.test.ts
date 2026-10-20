@@ -285,6 +285,8 @@ describe("ConflictResolver", () => {
       commitActions: testCase.wantActions,
       materializeOperations: testCase.wantMaterialize,
       conflictPaths: testCase.wantConflicts,
+      // Conflict records have their own tests below.
+      conflictRecords: expect.any(Array),
       nextIndexMutations: testCase.wantMutations,
     });
   });
@@ -314,7 +316,7 @@ describe("ConflictResolver", () => {
     });
   });
 
-  it("keeps the remote version at the original path by default and writes a readable text conflict report", async () => {
+  it("keeps the remote version at the original path by default and saves this device's version as the copy", async () => {
     const plan = await new ConflictResolver().resolve({
       snapshots: [snapshot("note.md", present("local line"), present("base line"))],
       remote: { "note.md": present("remote line") },
@@ -334,14 +336,19 @@ describe("ConflictResolver", () => {
         contentBase64: conflictBase64,
       },
     ]);
-    expect(conflictContent).toContain("Kept at original path: GitLab");
-    expect(conflictContent).toContain("Conflict copy contains: iPhone");
-    expect(conflictContent).toContain("```diff");
-    expect(conflictContent).toContain("- GitLab: remote line");
-    expect(conflictContent).toContain("+ iPhone: local line");
+    expect(conflictContent).toBe("local line");
+    expect(plan.conflictRecords).toEqual([
+      {
+        path: "note.md",
+        copyPath: `note — conflict iPhone ${conflictStamp}.md`,
+        keptSide: "remote",
+        baseBlobId: expect.any(String),
+        createdAt: now.getTime(),
+      },
+    ]);
   });
 
-  it("labels the conflict copy and its report with the device name it was given", async () => {
+  it("labels the conflict copy with the device name it was given", async () => {
     const plan = await new ConflictResolver().resolve({
       snapshots: [snapshot("note.md", present("local line"), present("base line"))],
       remote: { "note.md": present("remote line") },
@@ -355,10 +362,7 @@ describe("ConflictResolver", () => {
     expect(plan.commitActions[0]).toMatchObject({
       file_path: `note — conflict macbook-work ${conflictStamp}.md`,
     });
-    expect(conflictContent).toContain("Conflict copy contains: macbook-work");
-    expect(conflictContent).toContain("## macbook-work version");
-    expect(conflictContent).toContain("+ macbook-work: local line");
-    expect(conflictContent).not.toContain("iPhone");
+    expect(conflictContent).toBe("local line");
   });
 
   it("labels the deletion marker with the device name it was given", async () => {
@@ -380,7 +384,7 @@ describe("ConflictResolver", () => {
     expect(markerContent).not.toContain("iPhone");
   });
 
-  it("can keep the local version at the original path and write the remote version to the conflict report", async () => {
+  it("can keep the local version at the original path and save GitLab's version as the copy", async () => {
     const plan = await new ConflictResolver({ strategy: "local" }).resolve({
       snapshots: [snapshot("note.md", present("local line"), present("base line"))],
       remote: { "note.md": present("remote line") },
@@ -403,10 +407,23 @@ describe("ConflictResolver", () => {
       path: `note — conflict GitLab ${conflictStamp}.md`,
       contentBase64: conflictBase64,
     }]);
-    expect(conflictContent).toContain("Kept at original path: iPhone");
-    expect(conflictContent).toContain("Conflict copy contains: GitLab");
-    expect(conflictContent).toContain("- GitLab: remote line");
-    expect(conflictContent).toContain("+ iPhone: local line");
+    expect(conflictContent).toBe("remote line");
+    expect(plan.conflictRecords).toMatchObject([
+      { path: "note.md", copyPath: `note — conflict GitLab ${conflictStamp}.md`, keptSide: "local" },
+    ]);
+  });
+
+  it("records no conflict for a deletion marker, which has no second version to compare", async () => {
+    const plan = await new ConflictResolver().resolve({
+      snapshots: [snapshot("note.md", missing(), present("base line"))],
+      remote: { "note.md": present("remote line") },
+      trackedFiles: {},
+      now,
+      deviceName: "iPhone",
+    });
+
+    expect(plan.conflictPaths).toHaveLength(1);
+    expect(plan.conflictRecords).toEqual([]);
   });
 
   it("auto-merges non-overlapping text changes into the original path", async () => {
@@ -544,40 +561,15 @@ function tracked(text: string): TrackedFile {
   return { blobId: blobId(text), mode: "100644", size: value.byteLength };
 }
 
+/** A conflict copy holds the other side's version as is. */
 function report(
-  path: string,
-  keptAtOriginalPath: string,
+  _path: string,
+  _keptAtOriginalPath: string,
   conflictCopyContains: string,
   localText: string,
   remoteText: string,
 ): string {
-  return [
-    "# Sync conflict",
-    "",
-    `Original path: \`${path}\``,
-    `Kept at original path: ${keptAtOriginalPath}`,
-    `Conflict copy contains: ${conflictCopyContains}`,
-    "",
-    "## Diff",
-    "",
-    "```diff",
-    `- GitLab: ${remoteText}`,
-    `+ iPhone: ${localText}`,
-    "```",
-    "",
-    "## iPhone version",
-    "",
-    "```markdown",
-    localText,
-    "```",
-    "",
-    "## GitLab version",
-    "",
-    "```markdown",
-    remoteText,
-    "```",
-    "",
-  ].join("\n");
+  return conflictCopyContains === "GitLab" ? remoteText : localText;
 }
 
 function snapshot(
