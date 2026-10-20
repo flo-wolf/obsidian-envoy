@@ -1,8 +1,13 @@
-# GitLab Gitless Sync
+# Courier
+
+> Courier is a fork of [GitLab Gitless Sync](https://github.com/TerekhinAO/obsidian-gitlab-sync)
+> by Alexander Terekhin, itself based on GitHub Gitless Sync by Silvano Cerza.
+> It adds support for [Enclave](https://github.com/flo-wolf/obsidian-enclave): notes
+> Enclave encrypts are only ever uploaded locked. Licensed AGPL-3.0, like the original.
 
 Sync an Obsidian vault with a GitLab repository **without requiring Git on the device**.
 
-GitLab Gitless Sync keeps a vault and a single GitLab repository branch in sync using only the
+Courier keeps a vault and a single GitLab repository branch in sync using only the
 GitLab REST API. It is designed for mobile devices (where Git is unavailable) while staying fully
 interoperable with an ordinary desktop Git workflow against the same branch.
 
@@ -27,13 +32,13 @@ Requires Obsidian 1.11.4 or newer.
 ### Community plugins
 
 Once available in the Obsidian Community Plugins registry: open **Settings → Community plugins →
-Browse**, search for **GitLab Gitless Sync**, install and enable it.
+Browse**, search for **Courier**, install and enable it.
 
 ### Manual
 
 Download `main.js`, `manifest.json`, and `styles.css` from the
 [latest release](https://github.com/TerekhinAO/obsidian-gitlab-sync/releases) and copy them
-into `<vault>/.obsidian/plugins/gitlab-gitless-sync/`, then enable the plugin.
+into `<vault>/.obsidian/plugins/courier/`, then enable the plugin.
 
 ## Getting started
 
@@ -70,7 +75,7 @@ the old token and create a new one.
 **Back up the vault before connecting.** The plugin never deletes a file and never overwrites one
 side silently, but connecting does bring remote content into the vault.
 
-Fill in **Settings → GitLab Gitless Sync → GitLab repository**:
+Fill in **Settings → Courier → GitLab repository**:
 
 - **GitLab base URL** — `https://gitlab.com`, or your self-managed HTTPS instance
   (e.g. `https://gitlab.example.com`). HTTPS is required.
@@ -100,7 +105,7 @@ icon or command palette) syncs on demand at any time.
 
 ### Step 3 — Turn on automatic sync
 
-All automatic modes live under **Settings → GitLab Gitless Sync → Sync** and are off-by-default
+All automatic modes live under **Settings → Courier → Sync** and are off-by-default
 except *Sync on startup*. Pick the set that matches the device.
 
 **On desktop — sync by time.** The desktop app stays open for hours, so time-based triggers are what
@@ -129,7 +134,7 @@ events cannot stack up syncs.
 
 ### Step 4 — Add a `.gitignore`
 
-The plugin excludes only its own runtime folder (`.obsidian/plugins/gitlab-gitless-sync/`), its log,
+The plugin excludes only its own runtime folder (`.obsidian/plugins/courier/`), its log,
 the `.git` directory, and sync-metadata files. **Everything else — including the rest of
 `.obsidian/` — is synced unless you ignore it.** So on a new vault, create a `.gitignore` in the
 vault root.

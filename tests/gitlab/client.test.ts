@@ -24,7 +24,7 @@ const settings: GitLabSyncSettings = {
   gitlabBaseUrl: "https://gitlab.com",
   projectPath: "developing1382536/obsidian-vault",
   branch: "main",
-  tokenSecretName: "gitlab-gitless-sync-token",
+  tokenSecretName: "courier-token",
   authorName: "Mobile User",
   authorEmail: "mobile@example.com",
   syncOnStartup: true,

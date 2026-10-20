@@ -24,7 +24,7 @@ describe("StateStore", () => {
     expect(data.settings.gitlabBaseUrl).toBe("https://gitlab.com");
     expect(data.settings.projectPath).toBe("");
     expect(data.settings.branch).toBe("main");
-    expect(data.settings.tokenSecretName).toBe("gitlab-gitless-sync-token");
+    expect(data.settings.tokenSecretName).toBe("courier-token");
     expect(data.settings.syncOnStartup).toBe(true);
     expect(data.settings.syncOnForeground).toBe(true);
     expect(data.settings.syncOnBackground).toBe(false);

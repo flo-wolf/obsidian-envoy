@@ -6,7 +6,7 @@ export const DEFAULT_SETTINGS: GitLabSyncSettings = {
   gitlabBaseUrl: "https://gitlab.com",
   projectPath: "",
   branch: "main",
-  tokenSecretName: "gitlab-gitless-sync-token",
+  tokenSecretName: "courier-token",
   authorName: "",
   authorEmail: "",
   syncOnStartup: true,

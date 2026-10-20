@@ -290,7 +290,7 @@ describe("SyncManager", () => {
       localFiles: {
         "note.md": "note",
         "Welcome.md": "welcome",
-        ".obsidian/plugins/gitlab-gitless-sync/main.js": "runtime",
+        ".obsidian/plugins/courier/main.js": "runtime",
         "secret.md": "secret",
       },
     });

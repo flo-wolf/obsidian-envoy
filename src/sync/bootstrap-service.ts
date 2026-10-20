@@ -57,7 +57,7 @@ export class BootstrapService {
   private readonly pluginId: string;
 
   constructor(private options: BootstrapServiceOptions) {
-    this.pluginId = options.pluginId ?? "gitlab-gitless-sync";
+    this.pluginId = options.pluginId ?? "courier";
   }
 
   async merge(): Promise<ConnectMergeResult> {

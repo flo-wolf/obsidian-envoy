@@ -23,7 +23,7 @@ export class IgnoreMatcher {
 
   constructor(
     private vault: IgnoreVault,
-    private pluginId = "gitlab-gitless-sync",
+    private pluginId = "courier",
   ) {}
 
   async reload(): Promise<void> {
@@ -97,7 +97,7 @@ export class IgnoreMatcher {
     return (
       path === ".git" ||
       path.startsWith(".git/") ||
-      path === `${configDir}/gitlab-gitless-sync.log` ||
+      path === `${configDir}/courier.log` ||
       isMetadataPath(path) ||
       path === `${configDir}/plugins/${this.pluginId}` ||
       path.startsWith(runtimeDir)

@@ -706,7 +706,7 @@ describe("plugin lifecycle", () => {
     modal.onOpen();
 
     expect(JSON.stringify((modal as any).contentEl.rows)).not.toContain(
-      "gitlab-gitless-sync-token",
+      "courier-token",
     );
   });
 });

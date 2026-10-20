@@ -172,11 +172,11 @@ describe("BootstrapService", () => {
   it("strips exactly one generated archive root and skips the active plugin directory", async () => {
     const archive = await zip([
       { path: "generated-root/folder/note.md", content: "hello" },
-      { path: "generated-root/.obsidian/plugins/gitlab-gitless-sync/main.js", content: "remote plugin" },
+      { path: "generated-root/.obsidian/plugins/courier/main.js", content: "remote plugin" },
     ]);
     const setup = await fixture({
       localFiles: {
-        ".obsidian/plugins/gitlab-gitless-sync/main.js": bytes("local plugin"),
+        ".obsidian/plugins/courier/main.js": bytes("local plugin"),
       },
       tree: [
         { id: "blob-note", name: "note.md", type: "blob", path: "folder/note.md", mode: "100644" },
@@ -184,7 +184,7 @@ describe("BootstrapService", () => {
           id: "blob-plugin",
           name: "main.js",
           type: "blob",
-          path: ".obsidian/plugins/gitlab-gitless-sync/main.js",
+          path: ".obsidian/plugins/courier/main.js",
           mode: "100644",
         },
       ],
@@ -194,7 +194,7 @@ describe("BootstrapService", () => {
     await setup.service.merge();
 
     expect(setup.read("folder/note.md")).toEqual(bytes("hello"));
-    expect(setup.read(".obsidian/plugins/gitlab-gitless-sync/main.js")).toEqual(bytes("local plugin"));
+    expect(setup.read(".obsidian/plugins/courier/main.js")).toEqual(bytes("local plugin"));
     expect(setup.read("generated-root/folder/note.md")).toBeUndefined();
   });
 

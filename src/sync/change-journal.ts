@@ -29,7 +29,7 @@ export class ChangeJournal {
   private entries: Record<string, DirtyEntry> = {};
 
   constructor(private options: ChangeJournalOptions) {
-    this.pluginId = options.pluginId ?? "gitlab-gitless-sync";
+    this.pluginId = options.pluginId ?? "courier";
     this.now = options.now ?? Date.now;
   }
 
@@ -151,7 +151,7 @@ export class ChangeJournal {
     return (
       path === ".git" ||
       path.startsWith(".git/") ||
-      path === `${configDir}/gitlab-gitless-sync.log` ||
+      path === `${configDir}/courier.log` ||
       isMetadataPath(path) ||
       path === `${configDir}/plugins/${this.pluginId}` ||
       path.startsWith(runtimeDir)

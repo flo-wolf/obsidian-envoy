@@ -1,10 +1,10 @@
 {
-  "id": "gitlab-gitless-sync",
-  "name": "GitLab Gitless Sync",
-  "version": "1.0.17",
+  "id": "courier",
+  "name": "Courier",
+  "version": "0.1.0",
   "minAppVersion": "1.11.4",
-  "description": "Sync a vault with a GitLab repository without requiring Git.",
-  "author": "Alexander Terekhin",
-  "authorUrl": "https://github.com/TerekhinAO",
+  "description": "Sync a vault with a GitLab repository without Git, on desktop and mobile. Works with Enclave: notes are only ever uploaded locked.",
+  "author": "Florian Wolf",
+  "authorUrl": "https://github.com/flo-wolf",
   "isDesktopOnly": false
 }

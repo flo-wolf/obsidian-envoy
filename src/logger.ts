@@ -1,6 +1,6 @@
 import { Vault, normalizePath } from "obsidian";
 
-export const LOG_FILE_NAME = "gitlab-gitless-sync.log" as const;
+export const LOG_FILE_NAME = "courier.log" as const;
 export type LogLevel = "off" | "error" | "info" | "debug";
 
 const REDACTED = "[REDACTED]";

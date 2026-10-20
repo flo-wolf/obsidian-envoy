@@ -864,13 +864,13 @@ export class SyncManager {
     }
     const normalized = normalizePath(path);
     const configDir = normalizePath(vault.configDir);
-    const runtimeDir = `${configDir}/plugins/gitlab-gitless-sync/`;
+    const runtimeDir = `${configDir}/plugins/courier/`;
     return (
       normalized === ".git" ||
       normalized.startsWith(".git/") ||
-      normalized === `${configDir}/gitlab-gitless-sync.log` ||
+      normalized === `${configDir}/courier.log` ||
       isMetadataPath(normalized) ||
-      normalized === `${configDir}/plugins/gitlab-gitless-sync` ||
+      normalized === `${configDir}/plugins/courier` ||
       normalized.startsWith(runtimeDir)
     );
   }

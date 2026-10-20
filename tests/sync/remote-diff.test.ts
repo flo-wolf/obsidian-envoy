@@ -125,12 +125,12 @@ describe("RemoteDiffService", () => {
 
   it("hard-excludes runtime paths from compare and fallback", async () => {
     const fake = client({ compare_timeout: true, diffs: [] }, [
-      { id: "x", name: "main.js", type: "blob", path: ".obsidian/plugins/gitlab-gitless-sync/main.js", mode: "100644" },
+      { id: "x", name: "main.js", type: "blob", path: ".obsidian/plugins/courier/main.js", mode: "100644" },
     ]);
 
     const result = await new RemoteDiffService(
       fake,
-      (path) => path.startsWith(".obsidian/plugins/gitlab-gitless-sync"),
+      (path) => path.startsWith(".obsidian/plugins/courier"),
     ).discover({
       baseSha: "a",
       remoteSha: "b",

@@ -1,7 +1,7 @@
 {
-  "name": "gitlab-gitless-sync",
-  "version": "1.0.17",
-  "description": "Sync a vault with a GitLab repository without requiring Git.",
+  "name": "courier",
+  "version": "0.1.0",
+  "description": "Sync a vault with a GitLab repository without Git, on desktop and mobile. Works with Enclave: notes are only ever uploaded locked.",
   "main": "main.js",
   "scripts": {
     "dev": "node esbuild.config.mjs",
@@ -19,8 +19,9 @@
     "gitlab",
     "sync"
   ],
-  "author": "Alexander Terekhin",
+  "author": "Florian Wolf",
   "contributors": [
+    "Alexander Terekhin",
     "Silvano Cerza"
   ],
   "license": "AGPL-3.0-only",
@@ -45,5 +46,6 @@
   "dependencies": {
     "@zip.js/zip.js": "^2.7.60",
     "ignore": "^7.0.6"
-  }
+  },
+  "packageManager": "pnpm@9.15.9"
 }
