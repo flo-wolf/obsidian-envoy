@@ -1,1 +1,1 @@
-The GitLab token setting now lists the permissions the token needs.
+Corrects the token permissions shown in the settings: Branch: Read, Repository: Read and Commit: Create.
