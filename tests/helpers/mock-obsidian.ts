@@ -193,6 +193,16 @@ export class MockElement {
     this.buttons = [];
   }
 
+  hidden = false;
+
+  hide(): void {
+    this.hidden = true;
+  }
+
+  show(): void {
+    this.hidden = false;
+  }
+
   get textContent(): string {
     return this.ownText + this.children.map((child) => child.textContent).join("");
   }
@@ -232,6 +242,10 @@ export class MockButtonComponent {
     return this;
   }
 
+  setDestructive(): this {
+    return this;
+  }
+
   setTooltip(): this {
     return this;
   }
@@ -262,10 +276,12 @@ export class Modal {
 
 export class Setting {
   private row: { name?: string; desc?: string };
+  settingEl: MockElement;
 
   constructor(private containerEl: any) {
     this.row = {};
     containerEl.rows?.push(this.row);
+    this.settingEl = containerEl.createEl ? containerEl.createEl("div") : new MockElement("div");
   }
 
   setName(name: string): this {
@@ -273,8 +289,8 @@ export class Setting {
     return this;
   }
 
-  setDesc(desc: string): this {
-    this.row.desc = desc;
+  setDesc(desc: string | { textContent: string }): this {
+    this.row.desc = typeof desc === "string" ? desc : desc.textContent;
     return this;
   }
 
@@ -331,6 +347,14 @@ export class PluginSettingTab {
   ) {}
 
   display(): void {}
+
+  updates = 0;
+
+  update(): void {
+    this.updates += 1;
+  }
+
+  refreshDomState(): void {}
 }
 
 export class TextComponent {

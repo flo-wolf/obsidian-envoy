@@ -4,7 +4,7 @@ import GitLabSyncSettingsTab, { vaultSetupViewState } from "../src/settings/sett
 import { ConnectConfirmModal } from "../src/views/connect-confirm-modal";
 import type { ConnectPreview } from "../src/sync/bootstrap-service";
 import type { SyncHistoryEntry } from "../src/sync/types";
-import { MockElement } from "./helpers/mock-obsidian";
+import { MockElement, Setting } from "./helpers/mock-obsidian";
 
 describe("settings setup view state", () => {
   it("shows setup choices before the vault is initialized", () => {
@@ -56,16 +56,84 @@ function fakePlugin() {
     loadSyncHistory: vi.fn(async (): Promise<SyncHistoryEntry[]> => []),
     sync: vi.fn(async () => undefined),
     clearSyncHistory: vi.fn(async () => undefined),
+    showSyncRibbonIcon: vi.fn(),
+    hideSyncRibbonIcon: vi.fn(),
+    refreshAutoSyncInterval: vi.fn(),
+    logger: { setLevel: vi.fn(), read: vi.fn(async () => ""), clean: vi.fn(async () => undefined) },
   };
 }
 
+/** Renders the tab's definitions the way Obsidian does: visible rows, with their render callbacks. */
 function renderTab(plugin: ReturnType<typeof fakePlugin>) {
-  const tab = new GitLabSyncSettingsTab(plugin.app as any, plugin as any);
+  return renderDefinitions(new GitLabSyncSettingsTab(plugin.app as any, plugin as any));
+}
+
+function renderDefinitions(tab: GitLabSyncSettingsTab) {
   const container = new MockElement("div");
-  (tab as any).containerEl = container;
-  tab.display();
+  const visible = (item: { visible?: boolean | (() => boolean) }) =>
+    typeof item.visible === "function" ? item.visible() : item.visible !== false;
+  const renderItem = (item: any) => {
+    if (!visible(item)) return;
+    if (item.type === "group" || item.type === "list") {
+      for (const child of item.items ?? []) renderItem(child);
+      return;
+    }
+    const setting = new Setting(container).setName(item.name);
+    if (item.desc) setting.setDesc(item.desc);
+    item.render?.(setting, {});
+  };
+  for (const item of tab.getSettingDefinitions()) renderItem(item);
   return container;
 }
+
+describe("settings tab values", () => {
+  it("cleans up typed values before saving, in the plugin's own settings object", async () => {
+    const plugin = fakePlugin();
+    const settings = plugin.settings;
+    const tab = new GitLabSyncSettingsTab(plugin.app as any, plugin as any);
+
+    await tab.setControlValue("gitlabBaseUrl", " https://gitlab.example.com/// ");
+    await tab.setControlValue("branch", "  ");
+    await tab.setControlValue("deviceSpecificPaths", "appearance.json\n\n themes/ \n");
+    await tab.setControlValue("syncIntervalMinutes", 0);
+
+    expect(plugin.settings).toBe(settings);
+    expect(settings.gitlabBaseUrl).toBe("https://gitlab.example.com");
+    expect(settings.branch).toBe("main");
+    expect(settings.deviceSpecificPaths).toEqual(["appearance.json", "themes/"]);
+    expect(tab.getControlValue("deviceSpecificPaths")).toBe("appearance.json\nthemes/");
+    expect(settings.syncIntervalMinutes).toBe(10);
+    expect(plugin.saveSettings).toHaveBeenCalledTimes(4);
+  });
+
+  it("applies settings that take effect right away", async () => {
+    const plugin = fakePlugin();
+    const tab = new GitLabSyncSettingsTab(plugin.app as any, plugin as any);
+
+    await tab.setControlValue("showRibbonIcon", false);
+    await tab.setControlValue("syncOnInterval", true);
+    await tab.setControlValue("loggingLevel", "debug");
+
+    expect(plugin.hideSyncRibbonIcon).toHaveBeenCalled();
+    expect(plugin.refreshAutoSyncInterval).toHaveBeenCalled();
+    expect(plugin.logger.setLevel).toHaveBeenCalledWith("debug");
+    expect(plugin.settings.loggingEnabled).toBe(true);
+  });
+
+  it("lists every regular setting for Obsidian's settings search", () => {
+    const tab = new GitLabSyncSettingsTab(fakePlugin().app as any, fakePlugin() as any);
+    const names: string[] = [];
+    const walk = (item: any) => {
+      if (item.items) item.items.forEach(walk);
+      else if (item.name) names.push(item.name);
+    };
+    tab.getSettingDefinitions().forEach(walk);
+    expect(names).toEqual(expect.arrayContaining([
+      "GitLab base URL", "Project path", "GitLab token", "Sync on startup", "Sync after edits",
+      "Device-specific settings", "Log level", "Recent syncs",
+    ]));
+  });
+});
 
 describe("settings tab render", () => {
   afterEach(() => {

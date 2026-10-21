@@ -89,21 +89,14 @@
 	white-space: pre-line;
 }
 
-/* Settings: device-specific settings, a full-width list under its description. */
-.envoy-device-specific-setting {
+/* Settings: the sync history row, its list wrapping below the description. */
+.envoy-history-setting {
 	flex-wrap: wrap;
-	gap: var(--size-4-2);
 }
-.envoy-device-specific-setting .setting-item-description {
-	white-space: pre-line;
-}
-.envoy-device-specific-setting .setting-item-control {
+.envoy-history-setting > .envoy-history {
 	flex-basis: 100%;
-}
-.envoy-device-specific-setting textarea {
-	width: 100%;
-	min-height: 6em;
-	font-family: var(--font-monospace);
+	order: 3;
+	margin-top: var(--size-4-3);
 }
 
 /* Settings: sync history, one collapsible block per sync. */

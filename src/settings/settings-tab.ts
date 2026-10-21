@@ -1,9 +1,18 @@
-import { App, Modal, Notice, PluginSettingTab, Setting, TextComponent } from "obsidian";
-import GitLabGitlessSyncPlugin from "../main";
+import {
+  type App,
+  Notice,
+  PluginSettingTab,
+  type Setting,
+  type SettingDefinitionItem,
+  type TextComponent,
+} from "obsidian";
+import type GitLabGitlessSyncPlugin from "../main";
 import type { LocalSyncState } from "../settings/settings";
+import type { ConflictStrategy, LogLevel } from "../sync/types";
 import { copyToClipboard } from "../utils";
 import { enclavePresence } from "../enclave/enclave-api";
 import { ConnectConfirmModal } from "../views/connect-confirm-modal";
+import { confirmAction } from "../views/confirm-modal";
 import { parseDeviceSpecificEntries } from "../sync/device-specific";
 import { formatWhen, renderSyncHistory } from "../views/sync-history-view";
 import { OBSIDIAN_SYNC_WARNING, obsidianSyncEnabled } from "../obsidian-sync";
@@ -55,6 +64,23 @@ export const TOKEN_HELP = [
   "Without fine-grained tokens: a project access token with the Maintainer role and the api scope. write_repository alone isn't enough.",
 ].join("\n");
 
+const CONFLICT_STRATEGIES: Record<ConflictStrategy, string> = {
+  remote: "GitLab's version",
+  local: "This device's version",
+  "auto-remote": "Merge, else GitLab's version",
+  "auto-local": "Merge, else this device's version",
+};
+
+const LOG_LEVELS: Record<LogLevel, string> = {
+  off: "Off",
+  error: "Errors",
+  info: "Info",
+  debug: "Debug",
+};
+
+const DEFAULT_EDIT_DEBOUNCE_SECONDS = 8;
+const DEFAULT_INTERVAL_MINUTES = 10;
+
 export default class GitLabSyncSettingsTab extends PluginSettingTab {
   private connectPreviewInProgress = false;
 
@@ -65,439 +91,435 @@ export default class GitLabSyncSettingsTab extends PluginSettingTab {
     super(app, plugin);
   }
 
-  display(): void {
-    const { containerEl } = this;
-    containerEl.empty();
+  getSettingDefinitions(): SettingDefinitionItem[] {
+    const connected = () => this.plugin.pluginData.state.initialized;
+    return [
+      {
+        name: "Obsidian Sync is turned on",
+        searchable: false,
+        render: (setting) => this.renderObsidianSyncWarning(setting),
+      },
+      {
+        name: "Sync now",
+        visible: connected,
+        render: (setting) => this.renderSyncNow(setting),
+      },
+      {
+        type: "group",
+        heading: "GitLab repository",
+        items: [
+          {
+            name: "GitLab base URL",
+            desc: "Your GitLab address, starting with https://",
+            control: { type: "text", key: "gitlabBaseUrl", placeholder: "https://gitlab.com" },
+          },
+          {
+            name: "Project path",
+            desc: "Your user or group name and the project name, as in the project's address on GitLab",
+            control: { type: "text", key: "projectPath", placeholder: "yourname/vault-personal" },
+          },
+          {
+            name: "Branch",
+            desc: "The branch to sync",
+            control: { type: "text", key: "branch", placeholder: "main" },
+          },
+          {
+            name: "GitLab token",
+            desc: TOKEN_HELP,
+            aliases: ["access token", "permissions"],
+            render: (setting) => this.renderToken(setting),
+          },
+          {
+            name: "Token secret name",
+            desc: "The name the token is stored under in Obsidian's secret storage on this device",
+            control: { type: "text", key: "tokenSecretName", placeholder: "envoy-token" },
+          },
+        ],
+      },
+      {
+        type: "group",
+        heading: "Commit author",
+        items: [
+          {
+            name: "Author name",
+            desc: "Also names this device in commit messages and conflict copies. Leave empty to use the detected platform.",
+            control: { type: "text", key: "authorName" },
+          },
+          {
+            name: "Author email",
+            control: { type: "text", key: "authorEmail" },
+          },
+        ],
+      },
+      {
+        type: "group",
+        heading: "Vault setup",
+        items: [
+          {
+            name: "Connect to GitLab",
+            aliases: ["vault connected"],
+            render: (setting) => this.renderSetup(setting),
+          },
+          {
+            name: "Reset local sync state",
+            desc:
+              "Makes this device forget everything it remembers about past syncs, as if it had never been connected. " +
+              "Use it when sync is stuck or keeps failing. Your files and GitLab stay as they are; afterwards you connect again.",
+            visible: connected,
+            render: (setting) => this.renderReset(setting),
+          },
+        ],
+      },
+      {
+        type: "group",
+        heading: "Sync",
+        items: [
+          {
+            name: "Sync on startup",
+            desc: "Run one sync after Obsidian is ready. On phones, the app is usually suspended before this runs, so use the next setting there instead.",
+            control: { type: "toggle", key: "syncOnStartup" },
+          },
+          {
+            name: "Sync on app foreground (mobile only)",
+            desc: "Run one sync whenever you open Obsidian again on a phone or tablet. The reliable choice on mobile.",
+            control: { type: "toggle", key: "syncOnForeground" },
+          },
+          {
+            name: "Sync on app background (mobile only)",
+            desc: "Run one sync when you leave Obsidian on a phone or tablet. Not always reliable: some devices suspend the app before the sync finishes.",
+            control: { type: "toggle", key: "syncOnBackground" },
+          },
+          {
+            name: "Sync after edits",
+            desc: "Run a sync a few seconds after you stop editing",
+            control: { type: "toggle", key: "syncAfterEdit" },
+          },
+          {
+            name: "Edit debounce (seconds)",
+            desc: "How long to wait after the last change before syncing",
+            visible: () => this.plugin.settings.syncAfterEdit,
+            control: {
+              type: "number",
+              key: "syncAfterEditDebounceSeconds",
+              placeholder: String(DEFAULT_EDIT_DEBOUNCE_SECONDS),
+              min: 1,
+              validate: (value) => wholeNumberFrom(value, 1),
+            },
+          },
+          {
+            name: "Sync on a timer",
+            desc: "Run a sync regularly to pull in changes from your other devices. Good for a desktop that stays open.",
+            control: { type: "toggle", key: "syncOnInterval" },
+          },
+          {
+            name: "Timer interval (minutes)",
+            desc: "How often the timer syncs",
+            visible: () => this.plugin.settings.syncOnInterval,
+            control: {
+              type: "number",
+              key: "syncIntervalMinutes",
+              placeholder: String(DEFAULT_INTERVAL_MINUTES),
+              min: 1,
+              validate: (value) => wholeNumberFrom(value, 1),
+            },
+          },
+          {
+            name: "When a file changed on both sides",
+            desc:
+              "Merge combines the changes in text files line by line. When it can't, or for other files, the chosen " +
+              "version stays in place and the other one goes into a copy, ready for the conflict window.",
+            aliases: ["conflict strategy"],
+            control: { type: "dropdown", key: "conflictStrategy", options: CONFLICT_STRATEGIES },
+          },
+          {
+            name: "Lock all notes before syncing",
+            desc: "When you sync with the sidebar button or the sync command, Enclave locks every unlocked note first, so all your changes go up. Automatic syncs never lock your notes; they hold unlocked notes back until they lock.",
+            // Only meaningful with Enclave, so only shown when it's enabled.
+            visible: () => enclavePresence(this.app).state !== "absent",
+            control: { type: "toggle", key: "lockBeforeManualSync" },
+          },
+        ],
+      },
+      {
+        type: "group",
+        heading: "This device",
+        items: [
+          {
+            name: "Device-specific settings",
+            desc: lines(
+              `Settings files this device keeps for itself, one per line, relative to the ${this.app.vault.configDir} folder. ` +
+                "Envoy never uploads them from this device and never changes or deletes them here, so this device can " +
+                "use its own theme or plugins while your other devices keep sharing theirs.",
+              "For example:",
+              "• appearance.json: theme, light or dark mode, font size and enabled CSS snippets",
+              "• community-plugins.json: which community plugins are turned on",
+              "A folder ends with a slash, e.g. themes/. This list is stored on this device only.",
+              "Take a file off the list to share it again: on the next sync, the repository's version replaces this " +
+                "device's (restart Obsidian to load it). If the repository has none, this device's file is uploaded.",
+            ),
+            control: {
+              type: "textarea",
+              key: "deviceSpecificPaths",
+              placeholder: "appearance.json\ncommunity-plugins.json",
+              rows: 4,
+            },
+          },
+        ],
+      },
+      {
+        type: "group",
+        heading: "Interface",
+        items: [
+          {
+            name: "Show sidebar icon",
+            desc: "Show a sync button in the left sidebar",
+            control: { type: "toggle", key: "showRibbonIcon" },
+          },
+          {
+            name: "Log level",
+            desc: "Use debug only while looking into a sync problem",
+            control: { type: "dropdown", key: "loggingLevel", options: LOG_LEVELS },
+          },
+          {
+            name: "Copy logs",
+            render: (setting) => {
+              setting.addButton((button) =>
+                button.setButtonText("Copy").onClick(async () => {
+                  try {
+                    await copyToClipboard(await this.plugin.logger.read());
+                    new Notice("Logs copied", 5000);
+                  } catch (error) {
+                    new Notice(`Couldn't copy the logs: ${error instanceof Error ? error.message : String(error)}`, 10000);
+                  }
+                }),
+              );
+            },
+          },
+          {
+            name: "Clean logs",
+            render: (setting) => {
+              setting.addButton((button) =>
+                button.setButtonText("Clean").onClick(async () => {
+                  await this.plugin.logger.clean();
+                  new Notice("Logs cleaned", 5000);
+                }),
+              );
+            },
+          },
+        ],
+      },
+      {
+        type: "group",
+        heading: "Sync history",
+        items: [
+          {
+            name: "Recent syncs",
+            desc:
+              "The latest syncs on this device that changed something or failed, newest first. " +
+              "Open one to see which files were pulled, pushed or merged. Syncs that found nothing to do aren't listed.",
+            aliases: ["history", "pulled", "pushed"],
+            render: (setting) => this.renderHistory(setting),
+          },
+        ],
+      },
+    ];
+  }
 
-    // Shown for as long as Obsidian's own Sync is turned on.
-    const warningEl = containerEl.createDiv();
-    void obsidianSyncEnabled(this.app.vault).then((enabled) => {
-      if (enabled) {
-        new Setting(warningEl)
-          .setName("Obsidian Sync is turned on")
-          .setDesc(OBSIDIAN_SYNC_WARNING)
-          .setClass("envoy-warning-setting");
-      }
-    });
+  getControlValue(key: string): unknown {
+    if (key === "deviceSpecificPaths") {
+      return this.plugin.settings.deviceSpecificPaths.join("\n");
+    }
+    return (this.plugin.settings as unknown as Record<string, unknown>)[key];
+  }
 
-    const state = this.plugin.pluginData.state;
-    if (state.initialized) {
-      new Setting(containerEl)
-        .setName("Sync now")
-        .setDesc(state.lastSyncAt ? `Last synced: ${formatWhen(state.lastSyncAt)}` : "Not synced yet")
-        .addButton((button) =>
-          button
-            .setButtonText("Sync now")
-            .setCta()
-            .onClick(async () => {
-              button.setDisabled(true).setButtonText("Syncing…");
-              await this.plugin.sync("manual");
-              this.display();
-            }),
-        );
+  /**
+   * Edits the plugin's settings object in place: the sync engine holds on to it.
+   */
+  async setControlValue(key: string, value: unknown): Promise<void> {
+    const settings = this.plugin.settings;
+    const text = typeof value === "string" ? value : "";
+    switch (key) {
+      case "gitlabBaseUrl":
+        settings.gitlabBaseUrl = text.trim().replace(/\/+$/, "");
+        break;
+      case "projectPath":
+        settings.projectPath = text.trim();
+        break;
+      case "branch":
+        settings.branch = text.trim() || "main";
+        break;
+      case "tokenSecretName":
+        settings.tokenSecretName = text.trim() || "envoy-token";
+        break;
+      case "deviceSpecificPaths":
+        settings.deviceSpecificPaths = parseDeviceSpecificEntries(text);
+        break;
+      case "syncAfterEditDebounceSeconds":
+        settings.syncAfterEditDebounceSeconds = wholeNumber(value, DEFAULT_EDIT_DEBOUNCE_SECONDS);
+        break;
+      case "syncIntervalMinutes":
+        settings.syncIntervalMinutes = wholeNumber(value, DEFAULT_INTERVAL_MINUTES);
+        break;
+      case "loggingLevel":
+        settings.loggingLevel = value === "error" || value === "info" || value === "debug" ? value : "off";
+        settings.loggingEnabled = settings.loggingLevel !== "off";
+        this.plugin.logger.setLevel(settings.loggingLevel);
+        break;
+      default:
+        (settings as unknown as Record<string, unknown>)[key] = value;
     }
 
-    new Setting(containerEl).setName("GitLab repository").setHeading();
+    if (key === "showRibbonIcon") {
+      if (settings.showRibbonIcon) {
+        this.plugin.showSyncRibbonIcon();
+      } else {
+        this.plugin.hideSyncRibbonIcon();
+      }
+    }
+    if (key === "syncOnInterval" || key === "syncIntervalMinutes") {
+      this.plugin.refreshAutoSyncInterval();
+    }
+    if (key === "syncOnInterval" || key === "syncAfterEdit") {
+      this.refreshDomState();
+    }
+    await this.plugin.saveSettings();
+  }
 
-    new Setting(containerEl)
-      .setName("GitLab base URL")
-      .setDesc("HTTPS GitLab instance URL")
-      .addText((text) =>
-        text
-          .setPlaceholder("https://gitlab.com")
-          .setValue(this.plugin.settings.gitlabBaseUrl)
-          .onChange(async (value) => {
-            this.plugin.settings.gitlabBaseUrl = value.trim().replace(/\/+$/, "");
-            await this.plugin.saveSettings();
+  /** Shown for as long as Obsidian's own Sync is turned on. */
+  private renderObsidianSyncWarning(setting: Setting): void {
+    setting.setDesc(OBSIDIAN_SYNC_WARNING).setClass("envoy-warning-setting");
+    setting.settingEl.hide();
+    void obsidianSyncEnabled(this.app.vault).then((enabled) => {
+      if (enabled) setting.settingEl.show();
+    });
+  }
+
+  private renderSyncNow(setting: Setting): void {
+    const lastSyncAt = this.plugin.pluginData.state.lastSyncAt;
+    setting
+      .setDesc(lastSyncAt ? `Last synced: ${formatWhen(lastSyncAt)}` : "Not synced yet")
+      .addButton((button) =>
+        button
+          .setButtonText("Sync now")
+          .setCta()
+          .onClick(async () => {
+            button.setDisabled(true).setButtonText("Syncing…");
+            await this.plugin.sync("manual");
+            this.update();
           }),
       );
+  }
 
-    new Setting(containerEl)
-      .setName("Project path")
-      .setDesc("Namespace and project path in GitLab, for example developing/obsidian-world")
-      .addText((text) =>
-        text
-          .setPlaceholder("group/project")
-          .setValue(this.plugin.settings.projectPath)
-          .onChange(async (value) => {
-            this.plugin.settings.projectPath = value.trim();
-            await this.plugin.saveSettings();
-          }),
-      );
-
-    new Setting(containerEl)
-      .setName("Branch")
-      .setDesc("Branch to synchronize")
-      .addText((text) =>
-        text
-          .setPlaceholder("main")
-          .setValue(this.plugin.settings.branch)
-          .onChange(async (value) => {
-            this.plugin.settings.branch = value.trim() || "main";
-            await this.plugin.saveSettings();
-          }),
-      );
-
-    let tokenInput: TextComponent;
-    new Setting(containerEl)
-      .setName("GitLab token")
-      .setDesc(TOKEN_HELP)
+  private renderToken(setting: Setting): void {
+    let tokenInput: TextComponent | undefined;
+    setting
       .setClass("envoy-token-setting")
       .addButton((button) =>
-        button.setIcon("eye-off").onClick(() => {
-          tokenInput.inputEl.type =
-            tokenInput.inputEl.type === "password" ? "text" : "password";
-          button.setIcon(tokenInput.inputEl.type === "password" ? "eye-off" : "eye");
+        button.setIcon("eye-off").setTooltip("Show or hide the token").onClick(() => {
+          if (!tokenInput) return;
+          const hidden = tokenInput.inputEl.type === "password";
+          tokenInput.inputEl.type = hidden ? "text" : "password";
+          button.setIcon(hidden ? "eye" : "eye-off");
         }),
       )
       .addText((text) => {
-        text.setPlaceholder("glpat-...").onChange(async (value) => {
+        text.setPlaceholder("Paste the token").onChange((value) => {
           this.app.secretStorage.setSecret(this.plugin.settings.tokenSecretName, value);
         });
         text.inputEl.type = "password";
         tokenInput = text;
       });
+  }
 
-    new Setting(containerEl)
-      .setName("Token secret name")
-      .setDesc("Local SecretStorage key used for the GitLab token")
-      .addText((text) =>
-        text
-          .setPlaceholder("envoy-token")
-          .setValue(this.plugin.settings.tokenSecretName)
-          .onChange(async (value) => {
-            this.plugin.settings.tokenSecretName =
-              value.trim() || "envoy-token";
-            await this.plugin.saveSettings();
-          }),
-      );
-
-    new Setting(containerEl).setName("Commit author").setHeading();
-
-    new Setting(containerEl)
-      .setName("Author name")
-      .setDesc(
-        "Also names this device in commit messages and conflict copies. Leave empty to use the detected platform.",
-      )
-      .addText((text) =>
-        text.setValue(this.plugin.settings.authorName).onChange(async (value) => {
-          this.plugin.settings.authorName = value;
-          await this.plugin.saveSettings();
-        }),
-      );
-
-    new Setting(containerEl)
-      .setName("Author email")
-      .addText((text) =>
-        text.setValue(this.plugin.settings.authorEmail).onChange(async (value) => {
-          this.plugin.settings.authorEmail = value;
-          await this.plugin.saveSettings();
-        }),
-      );
-
-    new Setting(containerEl).setName("Vault setup").setHeading();
-
+  private renderSetup(setting: Setting): void {
     const setupState = vaultSetupViewState(this.plugin.pluginData.state);
-    const setupSetting = new Setting(containerEl)
-      .setName(setupState.title)
-      .setDesc(setupState.description);
-
-    if (setupState.showSetupActions) {
-      setupSetting.addButton((button) => {
-        button
-          .setButtonText("Connect to GitLab")
-          .setCta()
-          .onClick(async () => {
-            if (this.connectPreviewInProgress) return;
-            this.connectPreviewInProgress = true;
-            button.setDisabled(true).setButtonText("Checking GitLab…");
-            const progress = new Notice("Checking GitLab…", 0);
-            try {
-              const preview = await this.plugin.previewConnect();
-              if (!preview) return; // error/misconfig already surfaced by previewConnect
-              new ConnectConfirmModal(
-                this.plugin.app,
-                this.plugin.settings.projectPath,
-                this.plugin.settings.branch,
-                preview,
-                async () => {
-                  await this.plugin.connect(preview);
-                  this.display();
-                },
-              ).open();
-            } finally {
-              progress.hide();
-              this.connectPreviewInProgress = false;
-              button.setDisabled(false).setButtonText("Connect to GitLab");
-            }
-          });
-      });
+    setting.setName(setupState.title).setDesc(setupState.description);
+    if (!setupState.showSetupActions) {
+      return;
     }
-
-    if (setupState.showResetAction) {
-      new Setting(containerEl)
-        .setName("Reset local sync state")
-        .setDesc(
-          "Makes this device forget everything it remembers about past syncs, as if it had never been connected. " +
-            "Use it when sync is stuck or keeps failing. Your files and GitLab stay as they are; afterwards you connect again.",
-        )
-        .addButton((button) => {
-          button
-            .setButtonText("Reset")
-            .setWarning()
-            .onClick(() => {
-              const modal = new Modal(this.plugin.app);
-              modal.setTitle("Reset local sync state?");
-              modal.setContent(
-                "No file is deleted and nothing changes on GitLab. Afterwards, connect again: files that match the " +
-                  "repository are kept, settings files take the repository's version, and any other file that differs " +
-                  "is kept in both versions. Conflicts waiting in the conflict window are forgotten, but their copies stay in the vault.",
-              );
-              new Setting(modal.contentEl).addButton((btn) =>
-                btn
-                  .setButtonText("Reset")
-                  .setWarning()
-                  .onClick(async () => {
-                    await this.plugin.reset();
-                    modal.close();
-                    this.display();
-                  }),
-              );
-              modal.open();
-            });
-        });
-    }
-
-    new Setting(containerEl).setName("Sync").setHeading();
-
-    new Setting(containerEl)
-      .setName("Sync on startup")
-      .setDesc(
-        "Run one sync after Obsidian is ready. On mobile the app is usually suspended before this runs — use \"Sync on app foreground\" there instead.",
-      )
-      .addToggle((toggle) =>
-        toggle.setValue(this.plugin.settings.syncOnStartup).onChange(async (value) => {
-          this.plugin.settings.syncOnStartup = value;
-          await this.plugin.saveSettings();
-        }),
-      );
-
-    new Setting(containerEl)
-      .setName("Sync on app foreground (mobile only)")
-      .setDesc(
-        "Mobile only. Runs one sync when the app returns to the foreground (you reopen Obsidian). This is the reliable mobile replacement for \"Sync on startup\".",
-      )
-      .addToggle((toggle) =>
-        toggle.setValue(this.plugin.settings.syncOnForeground).onChange(async (value) => {
-          this.plugin.settings.syncOnForeground = value;
-          await this.plugin.saveSettings();
-        }),
-      );
-
-    new Setting(containerEl)
-      .setName("Sync on app background (mobile only)")
-      .setDesc(
-        "Mobile only. Runs one sync when the app is sent to the background (you leave Obsidian). Unstable — some devices suspend the app before the sync finishes.",
-      )
-      .addToggle((toggle) =>
-        toggle.setValue(this.plugin.settings.syncOnBackground).onChange(async (value) => {
-          this.plugin.settings.syncOnBackground = value;
-          await this.plugin.saveSettings();
-        }),
-      );
-
-    new Setting(containerEl)
-      .setName("Sync after edits")
-      .setDesc("Run a sync a few seconds after you stop editing (see \"Edit debounce\" below)")
-      .addToggle((toggle) =>
-        toggle.setValue(this.plugin.settings.syncAfterEdit).onChange(async (value) => {
-          this.plugin.settings.syncAfterEdit = value;
-          await this.plugin.saveSettings();
-        }),
-      );
-
-    new Setting(containerEl)
-      .setName("Edit debounce (seconds)")
-      .setDesc("How long to wait after the last change before syncing")
-      .addText((text) =>
-        text
-          .setPlaceholder("8")
-          .setValue(String(this.plugin.settings.syncAfterEditDebounceSeconds))
-          .onChange(async (value) => {
-            const parsed = Number.parseInt(value, 10);
-            this.plugin.settings.syncAfterEditDebounceSeconds =
-              Number.isFinite(parsed) && parsed >= 1 ? parsed : 8;
-            await this.plugin.saveSettings();
-          }),
-      );
-
-    new Setting(containerEl)
-      .setName("Sync on a timer")
-      .setDesc(
-        "Run a sync periodically to pull changes made on other devices. Great for keeping a desktop up to date.",
-      )
-      .addToggle((toggle) =>
-        toggle.setValue(this.plugin.settings.syncOnInterval).onChange(async (value) => {
-          this.plugin.settings.syncOnInterval = value;
-          await this.plugin.saveSettings();
-          this.plugin.refreshAutoSyncInterval();
-        }),
-      );
-
-    new Setting(containerEl)
-      .setName("Timer interval (minutes)")
-      .setDesc("How often the periodic sync runs")
-      .addText((text) =>
-        text
-          .setPlaceholder("10")
-          .setValue(String(this.plugin.settings.syncIntervalMinutes))
-          .onChange(async (value) => {
-            const parsed = Number.parseInt(value, 10);
-            this.plugin.settings.syncIntervalMinutes =
-              Number.isFinite(parsed) && parsed >= 1 ? parsed : 10;
-            await this.plugin.saveSettings();
-            this.plugin.refreshAutoSyncInterval();
-          }),
-      );
-
-    new Setting(containerEl)
-      .setName("Conflict strategy")
-      .setDesc(
-        "How to resolve a file changed on both sides since the last sync. " +
-          "Remote: keep the GitLab version at the original path and save yours as a conflict copy. " +
-          "Local: keep your version at the original path and save GitLab's as a conflict copy. " +
-          "Auto merge variants first attempt a line-based three-way merge of text files and only " +
-          "fall back to Remote/Local when the merge conflicts or the file is binary.",
-      )
-      .addDropdown((dropdown) =>
-        dropdown
-          .addOption("remote", "Remote")
-          .addOption("local", "Local")
-          .addOption("auto-remote", "Auto merge, fallback Remote")
-          .addOption("auto-local", "Auto merge, fallback Local")
-          .setValue(this.plugin.settings.conflictStrategy)
-          .onChange(async (value) => {
-            this.plugin.settings.conflictStrategy =
-              value === "local" || value === "auto-remote" || value === "auto-local"
-                ? value
-                : "remote";
-            await this.plugin.saveSettings();
-          }),
-      );
-
-    // Only meaningful with Enclave, so only shown when it's enabled.
-    if (enclavePresence(this.app).state !== "absent") {
-      new Setting(containerEl)
-        .setName("Lock all notes before syncing")
-        .setDesc(
-          "When you sync with the sidebar button or the Sync command, Enclave locks every unlocked note first, so all your changes go up. Automatic syncs never lock your notes; they hold unlocked notes back until they lock.",
-        )
-        .addToggle((toggle) =>
-          toggle.setValue(this.plugin.settings.lockBeforeManualSync).onChange(async (value) => {
-            this.plugin.settings.lockBeforeManualSync = value;
-            await this.plugin.saveSettings();
-          }),
-        );
-    }
-
-    new Setting(containerEl).setName("This device").setHeading();
-
-    const configDir = this.app.vault.configDir;
-    new Setting(containerEl)
-      .setName("Device-specific settings")
-      .setDesc(
-        [
-          `Settings files this device keeps for itself, one per line, relative to the ${configDir} folder. ` +
-            "Envoy never uploads them from this device and never changes or deletes them here, so this device can " +
-            "use its own theme or plugins while your other devices keep sharing theirs.",
-          "For example:",
-          "• appearance.json: theme, light or dark mode, font size and enabled CSS snippets",
-          "• community-plugins.json: which community plugins are turned on",
-          "A folder ends with a slash, e.g. themes/. This list is stored on this device only.",
-          "Take a file off the list to share it again: on the next sync, the repository's version replaces this " +
-            "device's (restart Obsidian to load it). If the repository has none, this device's file is uploaded.",
-        ].join("\n"),
-      )
-      .setClass("envoy-device-specific-setting")
-      .addTextArea((text) =>
-        text
-          .setPlaceholder("appearance.json\ncommunity-plugins.json")
-          .setValue(this.plugin.settings.deviceSpecificPaths.join("\n"))
-          .onChange(async (value) => {
-            this.plugin.settings.deviceSpecificPaths = parseDeviceSpecificEntries(value);
-            await this.plugin.saveSettings();
-          }),
-      );
-
-    new Setting(containerEl).setName("Interface").setHeading();
-
-    new Setting(containerEl)
-      .setName("Show sidebar icon")
-      .setDesc("Show a quick sync button in the left sidebar")
-      .addToggle((toggle) =>
-        toggle.setValue(this.plugin.settings.showRibbonIcon).onChange(async (value) => {
-          this.plugin.settings.showRibbonIcon = value;
-          if (value) {
-            this.plugin.showSyncRibbonIcon();
-          } else {
-            this.plugin.hideSyncRibbonIcon();
-          }
-          await this.plugin.saveSettings();
-        }),
-      );
-
-    new Setting(containerEl)
-      .setName("Log level")
-      .setDesc("Use Debug only while diagnosing sync behavior")
-      .addDropdown((dropdown) =>
-        dropdown
-          .addOption("off", "Off")
-          .addOption("error", "Error")
-          .addOption("info", "Info")
-          .addOption("debug", "Debug")
-          .setValue(this.plugin.settings.loggingLevel)
-          .onChange(async (value) => {
-            this.plugin.settings.loggingLevel =
-              value === "error" || value === "info" || value === "debug" ? value : "off";
-            this.plugin.settings.loggingEnabled = this.plugin.settings.loggingLevel !== "off";
-            this.plugin.logger.setLevel(this.plugin.settings.loggingLevel);
-            await this.plugin.saveSettings();
-          }),
-      );
-
-    new Setting(containerEl)
-      .setName("Copy logs")
-      .addButton((button) =>
-        button.setButtonText("Copy").onClick(async () => {
+    setting.addButton((button) => {
+      button
+        .setButtonText("Connect to GitLab")
+        .setCta()
+        .onClick(async () => {
+          if (this.connectPreviewInProgress) return;
+          this.connectPreviewInProgress = true;
+          button.setDisabled(true).setButtonText("Checking GitLab…");
+          const progress = new Notice("Checking GitLab…", 0);
           try {
-            await copyToClipboard(await this.plugin.logger.read());
-            new Notice("Logs copied", 5000);
-          } catch (err) {
-            new Notice(`Failed copying logs: ${err}`, 10000);
+            const preview = await this.plugin.previewConnect();
+            if (!preview) return; // error/misconfig already surfaced by previewConnect
+            new ConnectConfirmModal(
+              this.plugin.app,
+              this.plugin.settings.projectPath,
+              this.plugin.settings.branch,
+              preview,
+              async () => {
+                await this.plugin.connect(preview);
+                this.update();
+              },
+            ).open();
+          } finally {
+            progress.hide();
+            this.connectPreviewInProgress = false;
+            button.setDisabled(false).setButtonText("Connect to GitLab");
           }
-        }),
-      );
+        });
+    });
+  }
 
-    new Setting(containerEl)
-      .setName("Clean logs")
-      .addButton((button) =>
-        button.setButtonText("Clean").onClick(() => this.plugin.logger.clean()),
-      );
-
-    new Setting(containerEl).setName("Sync history").setHeading();
-    new Setting(containerEl)
-      .setDesc(
-        "The latest syncs on this device that changed something or failed, newest first. " +
-          "Open one to see which files were pulled, pushed or merged. Syncs that found nothing to do aren't listed.",
-      )
-      .addButton((button) =>
-        button.setButtonText("Clear").onClick(async () => {
-          await this.plugin.clearSyncHistory();
-          historyEl.empty();
-          renderSyncHistory(historyEl, []);
+  private renderReset(setting: Setting): void {
+    setting.addButton((button) =>
+      button
+        .setButtonText("Reset")
+        .setDestructive()
+        .onClick(async () => {
+          const confirmed = await confirmAction(this.plugin.app, {
+            title: "Reset local sync state?",
+            text:
+              "No file is deleted and nothing changes on GitLab. Afterwards, connect again: files that match the " +
+              "repository are kept, settings files take the repository's version, and any other file that differs " +
+              "is kept in both versions. Conflicts waiting in the conflict window are forgotten, but their copies stay in the vault.",
+            confirm: "Reset",
+            destructive: true,
+          });
+          if (!confirmed) return;
+          await this.plugin.reset();
+          this.update();
         }),
-      );
-    const historyEl = containerEl.createDiv({ cls: "envoy-history" });
+    );
+  }
+
+  private renderHistory(setting: Setting): void {
+    setting.setClass("envoy-history-setting");
+    const historyEl = setting.settingEl.createDiv({ cls: "envoy-history" });
+    setting.addButton((button) =>
+      button.setButtonText("Clear").onClick(async () => {
+        await this.plugin.clearSyncHistory();
+        historyEl.empty();
+        renderSyncHistory(historyEl, []);
+      }),
+    );
     void this.plugin.loadSyncHistory().then((history) => renderSyncHistory(historyEl, history));
+  }
+}
+
+/** A description with line breaks. */
+function lines(...parts: string[]): DocumentFragment {
+  return createFragment((fragment) => {
+    parts.forEach((part, index) => {
+      if (index > 0) fragment.createEl("br");
+      fragment.appendText(part);
+    });
+  });
+}
+
+function wholeNumber(value: unknown, fallback: number): number {
+  return typeof value === "number" && Number.isFinite(value) && value >= 1 ? Math.round(value) : fallback;
+}
+
+function wholeNumberFrom(value: number, min: number): string | void {
+  if (!Number.isInteger(value) || value < min) {
+    return `Enter a whole number of at least ${min}.`;
   }
 }
