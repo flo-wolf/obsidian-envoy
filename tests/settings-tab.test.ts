@@ -135,6 +135,38 @@ describe("settings tab values", () => {
   });
 });
 
+describe("Obsidian Sync warning", () => {
+  function tabWithCorePlugins(json: string) {
+    const plugin = fakePlugin();
+    const app = {
+      ...plugin.app,
+      vault: {
+        configDir: ".obsidian",
+        adapter: { exists: async () => true, read: async () => json },
+      },
+    };
+    const tab = new GitLabSyncSettingsTab(app as any, { ...plugin, app } as any);
+    const warning = () =>
+      tab.getSettingDefinitions().find((item: any) => item.name === "Obsidian Sync is turned on") as any;
+    return { tab, warning };
+  }
+
+  it("stays hidden while Obsidian Sync is off", async () => {
+    const { warning } = tabWithCorePlugins('{"sync": false}');
+    const item = warning();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(item.visible()).toBe(false);
+  });
+
+  it("shows once the check finds Obsidian Sync on", async () => {
+    const { tab, warning } = tabWithCorePlugins('{"sync": true}');
+    const refresh = vi.spyOn(tab, "refreshDomState");
+    const item = warning();
+    await vi.waitFor(() => expect(item.visible()).toBe(true));
+    expect(refresh).toHaveBeenCalled();
+  });
+});
+
 describe("settings tab render", () => {
   afterEach(() => {
     vi.restoreAllMocks();

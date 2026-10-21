@@ -83,6 +83,8 @@ const DEFAULT_INTERVAL_MINUTES = 10;
 
 export default class GitLabSyncSettingsTab extends PluginSettingTab {
   private connectPreviewInProgress = false;
+  /** Whether Obsidian's own Sync is on, as last read from the config folder. */
+  private obsidianSyncOn = false;
 
   constructor(
     app: App,
@@ -93,11 +95,16 @@ export default class GitLabSyncSettingsTab extends PluginSettingTab {
 
   getSettingDefinitions(): SettingDefinitionItem[] {
     const connected = () => this.plugin.pluginData.state.initialized;
+    void this.checkObsidianSync();
     return [
       {
         name: "Obsidian Sync is turned on",
+        desc: OBSIDIAN_SYNC_WARNING,
         searchable: false,
-        render: (setting) => this.renderObsidianSyncWarning(setting),
+        visible: () => this.obsidianSyncOn,
+        render: (setting) => {
+          setting.setClass("envoy-warning-setting");
+        },
       },
       {
         name: "Sync now",
@@ -385,13 +392,16 @@ export default class GitLabSyncSettingsTab extends PluginSettingTab {
     await this.plugin.saveSettings();
   }
 
-  /** Shown for as long as Obsidian's own Sync is turned on. */
-  private renderObsidianSyncWarning(setting: Setting): void {
-    setting.setDesc(OBSIDIAN_SYNC_WARNING).setClass("envoy-warning-setting");
-    setting.settingEl.hide();
-    void obsidianSyncEnabled(this.app.vault).then((enabled) => {
-      if (enabled) setting.settingEl.show();
-    });
+  /**
+   * Reads whether Obsidian's own Sync is on. The warning's visibility follows
+   * the answer; Obsidian applies it, so the row isn't hidden by hand.
+   */
+  private async checkObsidianSync(): Promise<void> {
+    const enabled = await obsidianSyncEnabled(this.app.vault);
+    if (enabled !== this.obsidianSyncOn) {
+      this.obsidianSyncOn = enabled;
+      this.refreshDomState();
+    }
   }
 
   private renderSyncNow(setting: Setting): void {
