@@ -85,6 +85,9 @@ it's never written to your vault, to logs or to GitLab.
 Envoy is a fork of [GitLab Gitless Sync](https://github.com/TerekhinAO/obsidian-gitlab-sync) by
 Alexander Terekhin, itself based on
 [GitHub Gitless Sync](https://github.com/silvanocerza/github-gitless-sync) by Silvano Cerza.
+Envoy is an independent plugin and isn't affiliated with, endorsed or sponsored by GitLab Inc.
+GitLab is a trademark of GitLab Inc.
+
 Licensed under AGPL-3.0-only; see
 [`LICENSE`](https://github.com/flo-wolf/obsidian-envoy/blob/main/LICENSE) and
 [`THIRD_PARTY_NOTICES.md`](https://github.com/flo-wolf/obsidian-envoy/blob/main/THIRD_PARTY_NOTICES.md).
