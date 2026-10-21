@@ -10,7 +10,7 @@ the full history is on GitLab and the repository works with a normal desktop Git
 
 ## Installation
 
-Requires Obsidian 1.11.4 or newer.
+Requires Obsidian 1.13 or newer.
 
 ### Community plugins
 

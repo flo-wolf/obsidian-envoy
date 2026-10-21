@@ -18,6 +18,7 @@ const requestUrlMock = vi.hoisted(() => vi.fn());
 
 vi.mock("obsidian", () => ({
   requestUrl: requestUrlMock,
+  Platform: { isDesktopApp: true },
 }));
 
 const settings: GitLabSyncSettings = {
@@ -290,6 +291,24 @@ describe("GitLabClient", () => {
       Accept: "application/zip",
       "PRIVATE-TOKEN": "token",
     });
+  });
+
+  it("keeps the archive error on mobile, where the Node fallback can't run", async () => {
+    const { Platform } = await import("obsidian");
+    Platform.isDesktopApp = false;
+    try {
+      fake.queue({
+        status: 406,
+        headers: { "content-type": "application/json" },
+        json: { message: "406 Not Acceptable" },
+        text: '{"message":"406 Not Acceptable"}',
+      });
+      await expect(new GitLabClient(settings, "token").downloadArchive("head-sha")).rejects.toMatchObject({
+        status: 406,
+      });
+    } finally {
+      Platform.isDesktopApp = true;
+    }
   });
 
   it("falls back to curl-equivalent HTTPS when Obsidian rejects the archive", async () => {

@@ -49,13 +49,13 @@ export default class Logger {
     if (await this.vault.adapter.exists(this.logFile)) {
       return;
     }
-    this.vault.adapter.write(this.logFile, "");
+    await this.vault.adapter.write(this.logFile, "");
   }
 
   private async write(
     level: "ERROR" | "WARN" | "INFO" | "DEBUG",
     message: string,
-    data?: any,
+    data?: unknown,
   ): Promise<void> {
     if (LOG_LEVEL_PRIORITY[this.level] < ENTRY_LEVEL_PRIORITY[level]) return;
 
@@ -92,19 +92,19 @@ export default class Logger {
     this.level = level;
   }
 
-  async debug(message: string, data?: any): Promise<void> {
+  async debug(message: string, data?: unknown): Promise<void> {
     await this.write("DEBUG", message, data);
   }
 
-  async info(message: string, data?: any): Promise<void> {
+  async info(message: string, data?: unknown): Promise<void> {
     await this.write("INFO", message, data);
   }
 
-  async warn(message: string, data?: any): Promise<void> {
+  async warn(message: string, data?: unknown): Promise<void> {
     await this.write("WARN", message, data);
   }
 
-  async error(message: string, data?: any): Promise<void> {
+  async error(message: string, data?: unknown): Promise<void> {
     await this.write("ERROR", message, data);
   }
 }

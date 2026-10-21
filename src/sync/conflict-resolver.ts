@@ -296,8 +296,9 @@ export async function calculateGitBlobId(bytes: Uint8Array): Promise<string> {
   payload.set(header, 0);
   payload.set(bytes, header.byteLength);
 
-  if (globalThis.crypto?.subtle) {
-    const digest = await globalThis.crypto.subtle.digest("SHA-1", payload);
+  const subtle = typeof crypto === "undefined" ? undefined : crypto.subtle;
+  if (subtle) {
+    const digest = await subtle.digest("SHA-1", payload);
     return hex(new Uint8Array(digest));
   }
 

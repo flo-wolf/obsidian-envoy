@@ -99,7 +99,7 @@ export class LocalMaterializer {
 
     try {
       await this.options.vault.adapter.rename(tempPath, path);
-    } catch (error) {
+    } catch {
       await this.options.vault.adapter.writeBinary(path, bytes);
       await this.removeIfExists(tempPath);
     }
@@ -231,20 +231,12 @@ function errorMessage(error: unknown): string {
 }
 
 function decodeBase64(contentBase64: string): ArrayBuffer {
-  if (typeof Buffer !== "undefined") {
-    return arrayBufferFromBytes(Buffer.from(contentBase64, "base64"));
-  }
-
   const binary = atob(contentBase64);
   const bytes = new Uint8Array(binary.length);
   for (let index = 0; index < binary.length; index += 1) {
     bytes[index] = binary.charCodeAt(index);
   }
   return bytes.buffer;
-}
-
-function arrayBufferFromBytes(bytes: Uint8Array): ArrayBuffer {
-  return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
 }
 
 function isMetadataPath(path: string): boolean {

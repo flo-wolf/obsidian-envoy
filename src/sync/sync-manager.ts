@@ -17,7 +17,7 @@ import { calculateGitBlobId, toBase64 } from "./conflict-resolver";
 import { DeviceSpecificPaths } from "./device-specific";
 import { describeChanges, isNoteworthy, withEntry, type SyncChanges } from "./sync-history";
 import { RemoteDiffService, type RemoteChange, type RemoteDiffClient } from "./remote-diff";
-import { StateStore } from "./state-store";
+import type { StateStore } from "./state-store";
 import { SyncPlanner, type SyncPlan } from "./sync-planner";
 import type {
   DirtyEntry,
@@ -243,7 +243,7 @@ export class SyncManager {
     this.validateBranch(branch);
     const remoteFiles = treeToTrackedFiles(
       await client.getTree(branch.commit.id),
-      this.isHardExcluded.bind(this),
+      (path: string) => this.isHardExcluded(path),
     );
     const deviceSpecific = await this.currentDeviceSpecific();
     const trackedFiles = deviceSpecific.withoutMatches(remoteFiles);
@@ -855,7 +855,7 @@ export class SyncManager {
   }
 
   private async readToken(settings: GitLabSyncSettings): Promise<string> {
-    const token = await (this.options.getToken ?? this.defaultGetToken.bind(this))(settings);
+    const token = this.options.getToken ? await this.options.getToken(settings) : this.defaultGetToken(settings);
     if (!token?.trim()) {
       throw new Error("GitLab token is missing");
     }
@@ -871,11 +871,11 @@ export class SyncManager {
     });
   }
 
-  private async defaultGetToken(settings: GitLabSyncSettings): Promise<string | null> {
+  private defaultGetToken(settings: GitLabSyncSettings): string | null {
     if (!this.options.app) {
       return null;
     }
-    return await this.options.app.secretStorage.getSecret(settings.tokenSecretName);
+    return this.options.app.secretStorage.getSecret(settings.tokenSecretName);
   }
 
   private validateBranch(branch: GitLabBranch): void {
@@ -897,9 +897,9 @@ export class SyncManager {
 
   private createRemoteDiffService(client: GitLabClientLike): RemoteDiffLike {
     if (this.options.createRemoteDiffService) {
-      return this.options.createRemoteDiffService(client, this.isHardExcluded.bind(this));
+      return this.options.createRemoteDiffService(client, (path: string) => this.isHardExcluded(path));
     }
-    return new RemoteDiffService(this.requireRemoteDiffClient(client), this.isHardExcluded.bind(this));
+    return new RemoteDiffService(this.requireRemoteDiffClient(client), (path: string) => this.isHardExcluded(path));
   }
 
   private requireRemoteDiffClient(client: GitLabClientLike): RemoteDiffClient {
@@ -1041,7 +1041,7 @@ export class SyncManager {
       }
       this.journal = new ChangeJournal({
         vault: this.options.vault,
-        stateStore: this.options.stateStore as StateStore,
+        stateStore: this.options.stateStore,
         plugin: plugin ?? this.options.plugin,
       });
     }
@@ -1058,7 +1058,7 @@ export class SyncManager {
       }
       this.materializer = new LocalMaterializer({
         vault: this.options.vault,
-        stateStore: this.options.stateStore as StateStore,
+        stateStore: this.options.stateStore,
         journal: this.getJournal(),
         logger: this.options.logger,
       });

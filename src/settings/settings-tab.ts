@@ -152,7 +152,7 @@ export default class GitLabSyncSettingsTab extends PluginSettingTab {
       )
       .addText((text) => {
         text.setPlaceholder("glpat-...").onChange(async (value) => {
-          await this.app.secretStorage.setSecret(this.plugin.settings.tokenSecretName, value);
+          this.app.secretStorage.setSecret(this.plugin.settings.tokenSecretName, value);
         });
         text.inputEl.type = "password";
         tokenInput = text;

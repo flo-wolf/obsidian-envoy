@@ -9,6 +9,7 @@ import { BootstrapService, type ConnectPreview } from "./sync/bootstrap-service"
 import { GitLabClient } from "./gitlab/client";
 import { GitLabNotFoundError } from "./gitlab/errors";
 import { DeviceSpecificPaths } from "./sync/device-specific";
+import { confirmAction } from "./views/confirm-modal";
 import { OBSIDIAN_SYNC_WARNING, obsidianSyncEnabled } from "./obsidian-sync";
 import { ConflictService } from "./conflicts/conflict-service";
 import { enclaveApi } from "./enclave/enclave-api";
@@ -41,10 +42,10 @@ export default class GitLabGitlessSyncPlugin extends Plugin {
   private lastAutoSyncTrigger: "foreground" | "background" | null = null;
   private lastEditSyncAt: number | null = null;
   private lastIntervalSyncAt: number | null = null;
-  private editSyncTimer: ReturnType<typeof setTimeout> | null = null;
-  private autoSyncIntervalHandle: ReturnType<typeof setInterval> | null = null;
+  private editSyncTimer: number | null = null;
+  private autoSyncIntervalHandle: number | null = null;
 
-  async onUserEnable() {
+  onUserEnable(): void {
     if (!this.isConfigured()) {
       new Notice("Go to settings to configure syncing");
     }
@@ -109,12 +110,15 @@ export default class GitLabGitlessSyncPlugin extends Plugin {
       repeatable: false,
       icon: "scan-search",
       callback: () => {
-        const confirmed = typeof window === "undefined" || window.confirm(
-          "Full audit scans local files and can be slow on mobile. Continue?",
-        );
-        if (confirmed) {
-          void this.sync("audit");
-        }
+        void confirmAction(this.app, {
+          title: "Full audit and sync",
+          text: "This reads every file in the vault to find changes, which can take a while on a phone.",
+          confirm: "Start",
+        }).then((confirmed) => {
+          if (confirmed) {
+            void this.sync("audit");
+          }
+        });
       },
     });
 
@@ -137,16 +141,16 @@ export default class GitLabGitlessSyncPlugin extends Plugin {
     });
   }
 
-  async onunload() {
+  onunload(): void {
     if (this.editSyncTimer !== null) {
-      clearTimeout(this.editSyncTimer);
+      window.clearTimeout(this.editSyncTimer);
       this.editSyncTimer = null;
     }
     if (this.autoSyncIntervalHandle !== null) {
-      clearInterval(this.autoSyncIntervalHandle);
+      window.clearInterval(this.autoSyncIntervalHandle);
       this.autoSyncIntervalHandle = null;
     }
-    await this.syncManager?.stopEventsListener();
+    void this.syncManager?.stopEventsListener();
   }
 
   async sync(trigger: SyncTrigger = "manual"): Promise<SyncResult | void> {
@@ -163,7 +167,7 @@ export default class GitLabGitlessSyncPlugin extends Plugin {
       if (trigger === "manual") {
         void this.openConflicts();
       } else {
-        new Notice('Sync found conflicts. Run "Resolve sync conflicts" to compare the versions.', 8000);
+        new Notice("Sync found conflicts. Run the command to resolve sync conflicts and compare the versions.", 8000);
       }
     }
     return result;
@@ -365,7 +369,7 @@ export default class GitLabGitlessSyncPlugin extends Plugin {
   }
 
   private async readToken(): Promise<string | null> {
-    const token = await this.app.secretStorage.getSecret(this.settings.tokenSecretName);
+    const token = this.app.secretStorage.getSecret(this.settings.tokenSecretName);
     return token?.trim() || null;
   }
 
@@ -535,13 +539,13 @@ export default class GitLabGitlessSyncPlugin extends Plugin {
       return;
     }
     if (this.editSyncTimer !== null) {
-      clearTimeout(this.editSyncTimer);
+      window.clearTimeout(this.editSyncTimer);
     }
     const seconds = Math.max(
       MIN_EDIT_DEBOUNCE_SECONDS,
       this.settings.syncAfterEditDebounceSeconds || DEFAULT_EDIT_DEBOUNCE_SECONDS,
     );
-    this.editSyncTimer = setTimeout(() => {
+    this.editSyncTimer = window.setTimeout(() => {
       this.editSyncTimer = null;
       void this.syncOnEditIfNeeded();
     }, seconds * 1000);
@@ -568,7 +572,7 @@ export default class GitLabGitlessSyncPlugin extends Plugin {
 
   refreshAutoSyncInterval(): void {
     if (this.autoSyncIntervalHandle !== null) {
-      clearInterval(this.autoSyncIntervalHandle);
+      window.clearInterval(this.autoSyncIntervalHandle);
       this.autoSyncIntervalHandle = null;
     }
     if (!this.settings.syncOnInterval) {
@@ -578,10 +582,10 @@ export default class GitLabGitlessSyncPlugin extends Plugin {
       MIN_INTERVAL_MINUTES,
       this.settings.syncIntervalMinutes || DEFAULT_INTERVAL_MINUTES,
     );
-    this.autoSyncIntervalHandle = setInterval(() => {
+    this.autoSyncIntervalHandle = window.setInterval(() => {
       void this.syncOnIntervalIfNeeded();
     }, minutes * 60_000);
-    this.registerInterval(this.autoSyncIntervalHandle as unknown as number);
+    this.registerInterval(this.autoSyncIntervalHandle);
   }
 
   private async syncOnIntervalIfNeeded(): Promise<void> {

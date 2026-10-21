@@ -1,4 +1,4 @@
-import { requestUrl } from "obsidian";
+import { Platform, requestUrl } from "obsidian";
 import type { GitLabSyncSettings } from "../sync/types";
 import {
   GitLabApiError,
@@ -86,6 +86,7 @@ export class GitLabClient {
   private readonly requestArchiveFallback: (
     request: ArchiveFallbackRequest,
   ) => Promise<ArchiveFallbackResponse>;
+  private readonly canUseArchiveFallback: boolean;
   private readonly onArchiveDiagnostic?: (
     diagnostic: ArchiveTransportDiagnostic,
   ) => void | Promise<void>;
@@ -111,6 +112,7 @@ export class GitLabClient {
     this.onPayloadWarning = options.onPayloadWarning;
     this.onRequest = options.onRequest;
     this.requestArchiveFallback = options.requestArchiveFallback ?? requestArchiveWithNode;
+    this.canUseArchiveFallback = options.requestArchiveFallback !== undefined || Platform.isDesktopApp;
     this.onArchiveDiagnostic = options.onArchiveDiagnostic;
     this.sleep =
       options.sleep ??
@@ -202,7 +204,8 @@ export class GitLabClient {
         },
       });
     } catch (error) {
-      if (!(error instanceof GitLabApiError) || error.status !== 406) {
+      // The Node fallback below needs desktop; on mobile the original error stands.
+      if (!(error instanceof GitLabApiError) || error.status !== 406 || !this.canUseArchiveFallback) {
         throw error;
       }
     }
@@ -303,14 +306,14 @@ export class GitLabClient {
       const url = await this.requestUrl(path, method);
       let response: RequestUrlResponse;
       try {
-        response = (await requestUrl({
+        response = await requestUrl({
           url,
           method,
           headers: this.headers(responseType, options.accept),
           contentType: options.contentType,
           body: options.body,
           throw: false,
-        })) as RequestUrlResponse;
+        });
       } catch (error) {
         throw new GitLabApiError(
           0,
@@ -438,7 +441,7 @@ export class GitLabClient {
         json &&
         typeof json === "object" &&
         "message" in json
-          ? String((json as { message: unknown }).message)
+          ? String(json.message)
           : null;
     } catch {
       bodyMessage = null;

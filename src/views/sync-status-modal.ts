@@ -1,9 +1,9 @@
-import { Modal, Setting } from "obsidian";
+import { type App, Modal, Setting } from "obsidian";
 import type { GitLabSyncSettings, LocalSyncState } from "../sync/types";
 
 export class SyncStatusModal extends Modal {
   constructor(
-    app: any,
+    app: App,
     private readonly settings: GitLabSyncSettings,
     private readonly state: LocalSyncState,
   ) {

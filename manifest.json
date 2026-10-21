@@ -1,8 +1,8 @@
 {
   "id": "envoy",
   "name": "Envoy",
-  "version": "0.1.12",
-  "minAppVersion": "1.11.4",
+  "version": "0.1.13",
+  "minAppVersion": "1.13.0",
   "description": "Sync a vault with a GitLab repository without Git, on desktop and mobile. Works with Enclave: notes are only ever uploaded locked.",
   "author": "Florian Wolf",
   "authorUrl": "https://github.com/flo-wolf",

@@ -59,11 +59,10 @@ export class LocalSnapshotService {
   }
 
   private async isDirectory(path: string): Promise<boolean> {
-    const stat = this.vault.adapter.stat;
-    if (!stat) {
+    if (!this.vault.adapter.stat) {
       return false;
     }
-    const info = await stat.call(this.vault.adapter, path);
+    const info = await this.vault.adapter.stat(path);
     return info?.type === "folder";
   }
 

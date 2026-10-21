@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import type { App } from "obsidian";
 import GitLabGitlessSyncPlugin from "../src/main";
 import { DEFAULT_SETTINGS, DEFAULT_STATE } from "../src/settings/settings";
 import { SyncStatusModal } from "../src/views/sync-status-modal";
@@ -463,7 +464,7 @@ describe("plugin lifecycle", () => {
   it("merges from GitLab before adopting the existing vault when connecting", async () => {
     const app = fakeApp(() => undefined);
     (app as any).secretStorage = {
-      getSecret: async () => "test-token",
+      getSecret: () => "test-token",
     };
     const plugin = new TestPlugin(fakePluginData(), app);
     await plugin.onload();
@@ -489,7 +490,7 @@ describe("plugin lifecycle", () => {
   it("surfaces connect failures instead of throwing", async () => {
     const app = fakeApp(() => undefined);
     (app as any).secretStorage = {
-      getSecret: async () => "test-token",
+      getSecret: () => "test-token",
     };
     const plugin = new TestPlugin(fakePluginData(), app);
     await plugin.onload();
@@ -506,7 +507,7 @@ describe("plugin lifecycle", () => {
   it("surfaces connect failures when adopting the vault reports an error", async () => {
     const app = fakeApp(() => undefined);
     (app as any).secretStorage = {
-      getSecret: async () => "test-token",
+      getSecret: () => "test-token",
     };
     const plugin = new TestPlugin(fakePluginData(), app);
     await plugin.onload();
@@ -536,7 +537,7 @@ describe("plugin lifecycle", () => {
   it("returns the preview summary when previewing a connection", async () => {
     const app = fakeApp(() => undefined);
     (app as any).secretStorage = {
-      getSecret: async () => "test-token",
+      getSecret: () => "test-token",
     };
     const plugin = new TestPlugin(fakePluginData(), app);
     await plugin.onload();
@@ -563,7 +564,7 @@ describe("plugin lifecycle", () => {
   it("surfaces preview failures as null instead of throwing", async () => {
     const app = fakeApp(() => undefined);
     (app as any).secretStorage = {
-      getSecret: async () => "test-token",
+      getSecret: () => "test-token",
     };
     const plugin = new TestPlugin(fakePluginData(), app);
     await plugin.onload();
@@ -584,7 +585,7 @@ describe("plugin lifecycle", () => {
   it("previewConnect returns seed mode for an empty repository", async () => {
     const app = fakeApp(() => undefined);
     (app as any).secretStorage = {
-      getSecret: async () => "test-token",
+      getSecret: () => "test-token",
     };
     const plugin = new TestPlugin(fakePluginData(), app);
     await plugin.onload();
@@ -612,7 +613,7 @@ describe("plugin lifecycle", () => {
   it("connect routes seed previews to initializeEmptyRemote", async () => {
     const app = fakeApp(() => undefined);
     (app as any).secretStorage = {
-      getSecret: async () => "test-token",
+      getSecret: () => "test-token",
     };
     const plugin = new TestPlugin(fakePluginData(), app);
     await plugin.onload();
@@ -638,7 +639,7 @@ describe("plugin lifecycle", () => {
   it("surfaces connect failures when seeding the empty remote reports an error", async () => {
     const app = fakeApp(() => undefined);
     (app as any).secretStorage = {
-      getSecret: async () => "test-token",
+      getSecret: () => "test-token",
     };
     const plugin = new TestPlugin(fakePluginData(), app);
     await plugin.onload();
@@ -670,7 +671,7 @@ describe("plugin lifecycle", () => {
   it("previewConnect reports branch-not-found with available branches", async () => {
     const app = fakeApp(() => undefined);
     (app as any).secretStorage = {
-      getSecret: async () => "test-token",
+      getSecret: () => "test-token",
     };
     const plugin = new TestPlugin(fakePluginData(), app);
     await plugin.onload();
@@ -694,9 +695,7 @@ describe("plugin lifecycle", () => {
 
   it("status modal never displays the token secret value", () => {
     const modal = new SyncStatusModal(
-      {
-        key: "app",
-      },
+      { key: "app" } as unknown as App,
       { ...DEFAULT_SETTINGS, projectPath: "group/project" },
       { ...DEFAULT_STATE, dirtyEntries: { "a.md": { path: "a.md", operation: "upsert", recordedAt: 1 } } },
     );

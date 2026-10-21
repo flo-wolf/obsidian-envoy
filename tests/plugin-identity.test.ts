@@ -11,9 +11,9 @@ describe("GitLab fork identity", () => {
     expect(manifest.description).not.toContain("GitHub");
   });
 
-  it("keeps release metadata aligned with the SecretStorage requirement", () => {
+  it("keeps release metadata aligned with the declarative settings requirement", () => {
     expect(manifest.version).toBe(packageJson.version);
-    expect(manifest.minAppVersion).toBe("1.11.4");
+    expect(manifest.minAppVersion).toBe("1.13.0");
     expect(versions[manifest.version as keyof typeof versions]).toBe(manifest.minAppVersion);
   });
 });
