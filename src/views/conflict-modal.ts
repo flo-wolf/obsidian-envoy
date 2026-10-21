@@ -1,6 +1,7 @@
 import { type App, Modal, Notice, Setting } from "obsidian";
 import type { ConflictService, OpenConflict, Side } from "../conflicts/conflict-service";
 import { assembleMerge, conflictCount, type ChunkChoice, type MergeChunk } from "../merge/merge-chunks";
+import { type DiffSegment, wordDiff } from "../merge/word-diff";
 import type { ConflictRecord } from "../sync/types";
 
 /** How many lines of unchanged text to show around the parts that matter. */
@@ -101,8 +102,9 @@ export class ConflictModal extends Modal {
     const choice = this.choices[index];
     const box = parent.createDiv({ cls: "envoy-chunk envoy-chunk-conflict" });
     const sides = box.createDiv({ cls: "envoy-conflict-sides" });
-    renderSide(sides, "This device", chunk.mine, choice === "mine" || choice === "both");
-    renderSide(sides, "GitLab", chunk.theirs, choice === "theirs" || choice === "both");
+    const diff = wordDiff(chunk.mine.join("\n"), chunk.theirs.join("\n"));
+    renderSide(sides, "This device", chunk.mine, choice === "mine" || choice === "both", diff?.mine);
+    renderSide(sides, "GitLab", chunk.theirs, choice === "theirs" || choice === "both", diff?.theirs);
 
     const buttons = new Setting(box).setClass("envoy-conflict-choice");
     const options: [ChunkChoice, string][] = [
@@ -196,10 +198,32 @@ export class ConflictListModal extends Modal {
   }
 }
 
-function renderSide(parent: HTMLElement, label: string, lines: string[], chosen: boolean): void {
+/** One side of a conflict; `segments` mark the words that differ from the other side. */
+function renderSide(
+  parent: HTMLElement,
+  label: string,
+  lines: string[],
+  chosen: boolean,
+  segments?: DiffSegment[],
+): void {
   const side = parent.createDiv({ cls: `envoy-conflict-side${chosen ? " is-chosen" : ""}` });
   side.createDiv({ cls: "envoy-conflict-side-label", text: label });
-  side.createEl("pre", { text: lines.length > 0 ? lines.join("\n") : "(removed)" });
+  if (lines.length === 0) {
+    side.createEl("pre", { text: "(Removed)" });
+    return;
+  }
+  const pre = side.createEl("pre");
+  if (!segments) {
+    pre.setText(lines.join("\n"));
+    return;
+  }
+  for (const segment of segments) {
+    if (segment.changed) {
+      pre.createSpan({ cls: "envoy-diff-changed", text: segment.text });
+    } else {
+      pre.appendText(segment.text);
+    }
+  }
 }
 
 /** Unchanged or automatically merged text; long unchanged stretches are shortened. */
@@ -210,7 +234,7 @@ function renderSettled(parent: HTMLElement, chunk: Exclude<MergeChunk, { kind: "
       cls: "envoy-chunk-label",
       text: chunk.from === "mine" ? "Changed on this device" : chunk.from === "theirs" ? "Changed on GitLab" : "Changed the same way on both",
     });
-    box.createEl("pre", { text: chunk.lines.length > 0 ? chunk.lines.join("\n") : "(removed)" });
+    box.createEl("pre", { text: chunk.lines.length > 0 ? chunk.lines.join("\n") : "(Removed)" });
     return;
   }
   const box = parent.createDiv({ cls: "envoy-chunk envoy-chunk-same" });

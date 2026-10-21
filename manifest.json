@@ -3,7 +3,7 @@
   "name": "Envoy",
   "version": "0.1.13",
   "minAppVersion": "1.13.0",
-  "description": "Sync a vault with a GitLab repository without Git, on desktop and mobile. Works with Enclave: notes are only ever uploaded locked.",
+  "description": "Sync your vault across iPhone, Android, Mac, Windows and Linux through your own private GitLab project. No Git needed. Merges changes from two devices, and with Enclave uploads notes only locked.",
   "author": "Florian Wolf",
   "authorUrl": "https://github.com/flo-wolf",
   "isDesktopOnly": false

@@ -1,1 +1,4 @@
-Fixes conflicts not opening: right after a sync created a conflict, the conflict window said "No sync conflicts to resolve" and forgot the conflict, because Obsidian hadn't listed the new conflict copy yet. Envoy now looks for the files on disk.
+- **Changes highlighted in the conflict window:** for each part changed on both devices, the words that differ between this device's and GitLab's version are marked.
+- **Settings in Obsidian's settings search:** the settings tab uses Obsidian's declarative settings API. The edit debounce and timer interval only show while their option is on, and the conflict strategy now names the versions as the conflict window does.
+- Fixes for the community directory review: no Node modules on mobile, popout-safe timers, an Obsidian dialog instead of the browser's confirm, typed logger, and more.
+- Requires Obsidian 1.13 or newer.

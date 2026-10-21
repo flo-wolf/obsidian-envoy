@@ -64,6 +64,13 @@
 	border-inline-start: 3px solid var(--interactive-accent);
 }
 
+/* Words one version has and the other doesn't. */
+.envoy-diff-changed {
+	border-radius: var(--radius-s);
+	background-color: var(--text-highlight-bg);
+	color: var(--text-normal);
+}
+
 .envoy-conflict-choice,
 .envoy-conflict-actions {
 	border-top: none;

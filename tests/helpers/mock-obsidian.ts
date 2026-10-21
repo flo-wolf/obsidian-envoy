@@ -164,21 +164,40 @@ export class MockElement {
   // can assert on rendered button labels and invoke their click handlers.
   buttons: MockButtonComponent[] = [];
 
-  createEl(tag: string, options?: { text?: string }): MockElement {
+  cls = "";
+
+  createEl(tag: string, options?: { text?: string; cls?: string }): MockElement {
     const child = new MockElement(tag);
     if (options?.text !== undefined) {
       child.ownText = options.text;
     }
+    child.cls = options?.cls ?? "";
     this.children.push(child);
     return child;
   }
 
-  createDiv(options?: { text?: string }): MockElement {
+  createDiv(options?: { text?: string; cls?: string }): MockElement {
     return this.createEl("div", options);
   }
 
-  createSpan(options?: { text?: string }): MockElement {
+  createSpan(options?: { text?: string; cls?: string }): MockElement {
     return this.createEl("span", options);
+  }
+
+  appendText(text: string): void {
+    this.createEl("#text", { text });
+  }
+
+  addClass(cls: string): void {
+    this.cls = `${this.cls} ${cls}`.trim();
+  }
+
+  /** Every descendant with the class `cls`. */
+  findAll(cls: string): MockElement[] {
+    return this.children.flatMap((child) => [
+      ...(child.cls.split(" ").includes(cls) ? [child] : []),
+      ...child.findAll(cls),
+    ]);
   }
 
   setText(text: string): void {
@@ -253,6 +272,7 @@ export class MockButtonComponent {
 
 export class Modal {
   titleEl = { setText: (_text: string) => undefined };
+  modalEl: any = new MockElement("div");
   contentEl: any = new MockElement("div");
 
   constructor(public app: any) {}
