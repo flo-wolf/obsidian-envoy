@@ -1,6 +1,6 @@
 {
   "name": "envoy",
-  "version": "0.1.17",
+  "version": "0.1.18",
   "description": "Sync your vault across iPhone, Android, Mac, Windows and Linux through your own private GitLab project. No Git needed. Merges changes from two devices, and with Enclave uploads notes only locked.",
   "main": "main.js",
   "scripts": {

@@ -143,6 +143,12 @@ export class Plugin {
   registerInterval(_interval: unknown): void {}
 
   registerEvent(_eventRef: EventRef): void {}
+
+  registerDomEvent(_el: unknown, _type: string, _listener: unknown): void {}
+
+  addStatusBarItem(): MockElement {
+    return new MockElement("div");
+  }
 }
 
 // Minimal general-purpose HTMLElement stub for view/modal tests.

@@ -582,6 +582,29 @@ describe("plugin lifecycle", () => {
     vi.restoreAllMocks();
   });
 
+  it("reopens conflicts left for later on a manual sync, and shows them in the status bar", async () => {
+    const record = { path: "Saturday.md", copyPath: "Saturday — conflict.md", keptSide: "remote", baseBlobId: null, createdAt: 1 };
+    const plugin = new TestPlugin(fakePluginData(), fakeApp(() => undefined));
+    await plugin.onload();
+    vi.spyOn(plugin.syncManager, "sync").mockResolvedValue({ status: "success", trigger: "manual", message: "Sync complete" });
+    vi.spyOn((plugin as any).conflicts, "pending").mockResolvedValue([record]);
+    const openConflicts = vi.spyOn(plugin, "openConflicts").mockResolvedValue(undefined);
+
+    await plugin.sync("interval");
+    expect(openConflicts).not.toHaveBeenCalled();
+    expect((plugin as any).conflictStatusEl.textContent).toBe("1 conflict");
+    expect((plugin as any).conflictStatusEl.hidden).toBe(false);
+
+    await plugin.sync("manual");
+    expect(openConflicts).toHaveBeenCalledTimes(1);
+
+    vi.spyOn((plugin as any).conflicts, "pending").mockResolvedValue([]);
+    await plugin.refreshConflicts();
+    expect((plugin as any).conflictStatusEl.hidden).toBe(true);
+
+    vi.restoreAllMocks();
+  });
+
   it("previewConnect returns seed mode for an empty repository", async () => {
     const app = fakeApp(() => undefined);
     (app as any).secretStorage = {

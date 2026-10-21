@@ -1,4 +1,4 @@
-import { Notice, Plugin } from "obsidian";
+import { Notice, Plugin, setIcon } from "obsidian";
 import { DEFAULT_STATE, type GitLabSyncSettings, type PluginData } from "./settings/settings";
 import GitLabSyncSettingsTab from "./settings/settings-tab";
 import Logger from "./logger";
@@ -36,6 +36,9 @@ export default class GitLabGitlessSyncPlugin extends Plugin {
 
   syncRibbonIcon: HTMLElement | null = null;
   private layoutReady = false;
+  private settingsTab: GitLabSyncSettingsTab | null = null;
+  /** Desktop status bar: how many conflicts wait, until they're resolved. */
+  private conflictStatusEl: HTMLElement | null = null;
   private lastForegroundSyncAt: number | null = null;
   private lastBackgroundSyncAt: number | null = null;
   private lastAutoSyncAt: number | null = null;
@@ -76,7 +79,14 @@ export default class GitLabGitlessSyncPlugin extends Plugin {
     });
     this.registerAppLifecycleHandlers();
 
-    this.addSettingTab(new GitLabSyncSettingsTab(this.app, this));
+    this.settingsTab = new GitLabSyncSettingsTab(this.app, this);
+    this.addSettingTab(this.settingsTab);
+    this.conflictStatusEl = this.addStatusBarItem();
+    this.conflictStatusEl.addClass("mod-clickable", "envoy-conflict-status");
+    this.conflictStatusEl.setAttribute("aria-label", "Resolve sync conflicts");
+    this.conflictStatusEl.hide();
+    // The item is removed with the plugin, and its listener with it.
+    this.conflictStatusEl.addEventListener("click", () => void this.openConflicts());
 
     this.app.workspace.onLayoutReady(async () => {
       this.syncManager.startEventsListener(this);
@@ -89,6 +99,7 @@ export default class GitLabGitlessSyncPlugin extends Plugin {
       this.registerEditSyncListeners();
       this.refreshAutoSyncInterval();
       void this.warnAboutObsidianSync();
+      void this.refreshConflicts();
 
       const recovered = await this.syncManager.recoverIfNeeded();
       if (!recovered && this.settings.syncOnStartup && this.pluginData.state.initialized) {
@@ -160,15 +171,13 @@ export default class GitLabGitlessSyncPlugin extends Plugin {
     }
 
     const result = await this.syncManager.sync(trigger);
-    this.pluginData = await this.stateStore.load();
-    if (result.status === "conflict") {
-      // After a sync the user started, go straight to the conflicts; automatic
-      // syncs only mention them, so they don't interrupt.
-      if (trigger === "manual") {
-        void this.openConflicts();
-      } else {
-        new Notice("Sync found conflicts. Run the command to resolve sync conflicts and compare the versions.", 8000);
-      }
+    const waiting = await this.refreshConflicts();
+    if (trigger === "manual" && waiting > 0) {
+      // A sync the user started goes straight to the conflicts, including ones
+      // left for later; automatic syncs only mention new ones, so they don't interrupt.
+      void this.openConflicts();
+    } else if (result.status === "conflict") {
+      new Notice("Sync found conflicts. Sync by hand or run the command to resolve sync conflicts to compare the versions.", 8000);
     }
     return result;
   }
@@ -192,15 +201,33 @@ export default class GitLabGitlessSyncPlugin extends Plugin {
       // For a locked note, Enclave may ask for passwords here.
       const conflict = await this.conflicts.open(record);
       if (conflict) {
-        new ConflictModal(this.app, this.conflicts, conflict, () => void this.refreshState()).open();
+        new ConflictModal(this.app, this.conflicts, conflict, () => void this.refreshConflicts()).open();
       }
     } catch (error) {
       new Notice(`Couldn't open the conflict: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
 
-  private async refreshState(): Promise<void> {
+  /**
+   * Re-reads which conflicts still wait (forgetting ones whose files are gone)
+   * and updates the status bar and the settings row. Returns how many wait.
+   */
+  async refreshConflicts(): Promise<number> {
+    const count = (await this.conflicts.pending()).length;
     this.pluginData = await this.stateStore.load();
+    const el = this.conflictStatusEl;
+    if (el) {
+      el.empty();
+      if (count === 0) {
+        el.hide();
+      } else {
+        setIcon(el.createSpan({ cls: "envoy-conflict-status-icon" }), "triangle-alert");
+        el.createSpan({ text: count === 1 ? "1 conflict" : `${count} conflicts` });
+        el.show();
+      }
+    }
+    this.settingsTab?.update();
+    return count;
   }
 
   private async makeConnectContext(): Promise<

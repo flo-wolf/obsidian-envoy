@@ -55,6 +55,7 @@ function fakePlugin() {
     saveSettings: vi.fn(async () => undefined),
     loadSyncHistory: vi.fn(async (): Promise<SyncHistoryEntry[]> => []),
     sync: vi.fn(async () => undefined),
+    openConflicts: vi.fn(async () => undefined),
     clearSyncHistory: vi.fn(async () => undefined),
     showSyncRibbonIcon: vi.fn(),
     hideSyncRibbonIcon: vi.fn(),
@@ -132,6 +133,22 @@ describe("settings tab values", () => {
       "GitLab base URL", "Project path", "GitLab token", "Sync on startup", "Sync after edits",
       "Device-specific settings", "Log level", "Recent syncs",
     ]));
+  });
+});
+
+describe("Sync conflicts row", () => {
+  const record = { path: "Saturday.md", copyPath: "Saturday — conflict.md", keptSide: "remote" as const, baseBlobId: null, createdAt: 1 };
+
+  it("only shows while conflicts wait, and opens them", () => {
+    const plugin = fakePlugin();
+    expect(renderTab(plugin).rows.map((row: { name?: string }) => row.name)).not.toContain("Sync conflicts");
+
+    Object.assign(plugin.pluginData.state, { conflicts: [record] });
+    const container = renderTab(plugin);
+    const row = container.rows.find((r: { name?: string }) => r.name === "Sync conflicts");
+    expect(row?.desc).toBe("1 note was changed on two devices and waits for you to pick what to keep.");
+    container.buttons.find((button) => button.buttonText === "Resolve")?.clickHandler?.();
+    expect(plugin.openConflicts).toHaveBeenCalled();
   });
 });
 

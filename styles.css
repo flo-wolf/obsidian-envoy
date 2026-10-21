@@ -359,3 +359,18 @@
 .envoy-warning-setting .setting-item-name {
 	color: var(--text-warning);
 }
+
+/* Status bar: conflicts waiting, until they are resolved. */
+.envoy-conflict-status {
+	display: flex;
+	align-items: center;
+	gap: var(--size-2-2);
+	color: var(--text-warning);
+}
+.envoy-conflict-status-icon {
+	display: inline-flex;
+}
+.envoy-conflict-status-icon svg {
+	width: var(--icon-xs);
+	height: var(--icon-xs);
+}

@@ -1,5 +1,5 @@
-Conflict window polish:
-- Every card has its own padding now, so text no longer touches the card's edge on hover or when a whole line is new.
-- When one device removed a part the other changed, the other version isn't highlighted word by word anymore, and no two lines share a number.
-- Unfolded unchanged lines simply join the note, with no extra row to fold them back.
-- The note scrolls inside the window (its header stays in view), so long notes or many unfolded lines don't push the buttons away. Picking a part keeps your scroll position.
+Conflicts left for later are easy to find again:
+- Closing the conflict window or choosing **Decide later** says how to come back to it.
+- While conflicts wait, the status bar shows **⚠ 1 conflict** (desktop); click it to open the window.
+- Envoy's settings show a **Sync conflicts** row with a **Resolve** button, also on phones.
+- A sync you start opens the conflict window whenever conflicts are waiting, not only when that sync found new ones.

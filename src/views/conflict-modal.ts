@@ -39,6 +39,7 @@ export class ConflictModal extends Modal {
   onClose(): void {
     if (!this.done) {
       this.service.cancel(this.conflict);
+      new Notice("Conflict saved for later. Sync by hand or run the command to resolve sync conflicts to come back to it.", 8000);
     }
     this.contentEl.empty();
   }

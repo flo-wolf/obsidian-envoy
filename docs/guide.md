@@ -191,8 +191,9 @@ A conflict is a file changed on this device and on GitLab before either side syn
 automatic merge couldn't combine. Envoy keeps one version at the file's path and the other in a
 copy next to it, named `<name> — conflict <device> <date>`, and records the conflict.
 
-Run **Resolve sync conflicts**, or just sync by hand: a manual sync that finds conflicts opens the
-conflict window right away.
+Run **Resolve sync conflicts**, or just sync by hand: a sync you start opens the conflict window
+whenever conflicts are waiting. While they wait, the status bar shows **⚠ 1 conflict** (click it),
+and Envoy's settings show a **Sync conflicts** row with a **Resolve** button, also on phones.
 
 - Parts changed on one side only are already filled in, compared against the last synced version.
 - The window shows the whole note as it will be saved, with line numbers. Unchanged stretches fold
@@ -205,7 +206,8 @@ conflict window right away.
   that aren't text, such as images, only offer whole versions.
 
 Saving writes the result to the note and deletes the copy; the next sync uploads both. **Decide
-later** leaves everything as it is.
+later** (or closing the window) leaves everything as it is, and the conflict waits until you come
+back to it.
 
 ## Working with Enclave
 

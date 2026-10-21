@@ -112,6 +112,23 @@ export default class GitLabSyncSettingsTab extends PluginSettingTab {
         render: (setting) => this.renderSyncNow(setting),
       },
       {
+        name: "Sync conflicts",
+        aliases: ["resolve", "conflict window"],
+        visible: () => this.waitingConflicts() > 0,
+        render: (setting) => {
+          const count = this.waitingConflicts();
+          setting
+            .setDesc(
+              count === 1
+                ? "1 note was changed on two devices and waits for you to pick what to keep."
+                : `${count} notes were changed on two devices and wait for you to pick what to keep.`,
+            )
+            .addButton((button) =>
+              button.setButtonText("Resolve").setCta().onClick(() => void this.plugin.openConflicts()),
+            );
+        },
+      },
+      {
         type: "group",
         heading: "GitLab repository",
         items: [
@@ -390,6 +407,10 @@ export default class GitLabSyncSettingsTab extends PluginSettingTab {
       this.refreshDomState();
     }
     await this.plugin.saveSettings();
+  }
+
+  private waitingConflicts(): number {
+    return this.plugin.pluginData.state.conflicts?.length ?? 0;
   }
 
   /**

@@ -93,6 +93,21 @@ describe("ConflictModal", () => {
     expect(numbers.slice(0, 7)).toEqual(["3", "4", "5", "6", "7", "8", "9"]);
   });
 
+  it("says how to come back when the window is closed without resolving", () => {
+    const notices: string[] = [];
+    (globalThis as { __noticeSpy?: unknown }).__noticeSpy = (message: string) => notices.push(message);
+    try {
+      const { modal, service } = open(base, mine, theirs);
+      modal.onClose();
+      expect(service.cancel).toHaveBeenCalled();
+      expect(notices).toEqual([
+        "Conflict saved for later. Sync by hand or run the command to resolve sync conflicts to come back to it.",
+      ]);
+    } finally {
+      delete (globalThis as { __noticeSpy?: unknown }).__noticeSpy;
+    }
+  });
+
   it("stays scrolled where it was after a pick", () => {
     const { content } = open(saturday, saturdayMine, saturdayTheirs);
     (content().findAll("envoy-file")[0] as unknown as { scrollTop: number }).scrollTop = 120;
