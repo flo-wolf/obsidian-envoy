@@ -213,6 +213,21 @@ export class MockElement {
   }
 
   hidden = false;
+  attributes: Record<string, string> = {};
+  listeners: Record<string, Array<(event: any) => void>> = {};
+
+  setAttribute(name: string, value: string): void {
+    this.attributes[name] = value;
+  }
+
+  addEventListener(type: string, listener: (event: any) => void): void {
+    (this.listeners[type] ??= []).push(listener);
+  }
+
+  /** Fires the element's listeners, as a click or key press would. */
+  dispatch(type: string, event: any = {}): void {
+    for (const listener of this.listeners[type] ?? []) listener({ preventDefault() {}, ...event });
+  }
 
   hide(): void {
     this.hidden = true;
@@ -424,6 +439,45 @@ export async function requestUrl(options: RequestUrlParam) {
  * Node has no Obsidian host, so every platform flag is false. Tests that care
  * about device naming inject their own flags instead of leaning on this.
  */
+export function setIcon(el: MockElement, icon: string): void {
+  el.attributes["data-icon"] = icon;
+}
+
+/** Records the items a menu was built with; `shown` once it's opened. */
+export class Menu {
+  static last: Menu | null = null;
+  items: Array<{ title: string; click?: () => void }> = [];
+  shown = false;
+
+  constructor() {
+    Menu.last = this;
+  }
+
+  addItem(build: (item: any) => void): this {
+    const entry: { title: string; click?: () => void } = { title: "" };
+    const item = {
+      setTitle(title: string) {
+        entry.title = title;
+        return item;
+      },
+      setIcon() {
+        return item;
+      },
+      onClick(click: () => void) {
+        entry.click = click;
+        return item;
+      },
+    };
+    build(item);
+    this.items.push(entry);
+    return this;
+  }
+
+  showAtMouseEvent(): void {
+    this.shown = true;
+  }
+}
+
 export const Platform = {
   isDesktop: false,
   isMobile: false,

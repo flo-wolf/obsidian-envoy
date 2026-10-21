@@ -1,4 +1,4 @@
-import { type App, Modal, Notice, Setting } from "obsidian";
+import { type App, Menu, Modal, Notice, Setting, setIcon } from "obsidian";
 import type { ConflictService, OpenConflict, Side } from "../conflicts/conflict-service";
 import { assembleMerge, conflictCount, type ChunkChoice, type MergeChunk } from "../merge/merge-chunks";
 import { type DiffSegment, wordDiff } from "../merge/word-diff";
@@ -55,7 +55,7 @@ export class ConflictModal extends Modal {
       text:
         open === 0
           ? "This device and GitLab changed different parts of this note, so they were merged automatically. Check the result and save it."
-          : `This device and GitLab both changed this note. Parts changed on one side only are already filled in. Choose a version for each of the ${open} remaining ${open === 1 ? "part" : "parts"}.`,
+          : `This device and GitLab both changed this note. Parts changed on one side only are already filled in. Pick the version to keep for ${open === 1 ? "the part" : `each of the ${open} parts`} changed on both.`,
     });
     if (!hasBase) {
       contentEl.createEl("p", {
@@ -98,55 +98,87 @@ export class ConflictModal extends Modal {
     this.renderActions(assembleMerge(chunks, this.choices));
   }
 
+  /** Both versions of one part; clicking a version picks it, "Use both" keeps this device's then GitLab's. */
   private renderConflict(parent: HTMLElement, chunk: Extract<MergeChunk, { kind: "conflict" }>, index: number): void {
     const choice = this.choices[index];
+    const pick = (value: ChunkChoice) => {
+      this.choices[index] = value;
+      this.render();
+    };
     const box = parent.createDiv({ cls: "envoy-chunk envoy-chunk-conflict" });
     const sides = box.createDiv({ cls: "envoy-conflict-sides" });
     const diff = wordDiff(chunk.mine.join("\n"), chunk.theirs.join("\n"));
-    renderSide(sides, "This device", chunk.mine, choice === "mine" || choice === "both", diff?.mine);
-    renderSide(sides, "GitLab", chunk.theirs, choice === "theirs" || choice === "both", diff?.theirs);
+    renderSide(sides, "This device", chunk.mine, choice === "mine" || choice === "both", diff?.mine, () => pick("mine"));
+    renderSide(sides, "GitLab", chunk.theirs, choice === "theirs" || choice === "both", diff?.theirs, () => pick("theirs"));
 
-    const buttons = new Setting(box).setClass("envoy-conflict-choice");
-    const options: [ChunkChoice, string][] = [
-      ["mine", "Use this device's"],
-      ["theirs", "Use GitLab's"],
-      ["both", "Use both"],
-    ];
-    for (const [value, label] of options) {
-      buttons.addButton((button) => {
-        button.setButtonText(label).onClick(() => {
-          this.choices[index] = value;
-          this.render();
-        });
-        if (choice === value) {
-          button.setCta();
-        }
-      });
-    }
+    new Setting(box).setClass("envoy-conflict-choice").addButton((button) => {
+      button.setButtonText("Use both").onClick(() => pick("both"));
+      if (choice === "both") {
+        button.setCta();
+      }
+    });
   }
 
   private renderActions(merged: string | null): void {
     const actions = new Setting(this.contentEl).setClass("envoy-conflict-actions");
-    actions.addButton((button) =>
-      button.setButtonText("Keep this device's version").onClick(() => void this.finish(() => this.service.keepSide(this.conflict, "mine"))),
-    );
-    actions.addButton((button) =>
-      button.setButtonText("Keep GitLab's version").onClick(() => void this.finish(() => this.service.keepSide(this.conflict, "theirs"))),
-    );
-    actions.addButton((button) => button.setButtonText("Decide later").onClick(() => this.close()));
-    if (this.conflict.kind === "merge") {
-      actions.addButton((button) => {
-        button
-          .setButtonText("Save merged note")
-          .setCta()
-          .setDisabled(merged === null)
-          .onClick(() => {
-            if (merged !== null) {
-              void this.finish(() => this.service.saveMerged(this.conflict, merged, this.lockLike));
-            }
-          });
-      });
+    if (this.conflict.kind === "whole") {
+      // Not text: a whole version is the only choice.
+      actions.addButton((button) =>
+        button.setButtonText("Keep this device's version").onClick(() => void this.keepWhole("mine")),
+      );
+      actions.addButton((button) =>
+        button.setButtonText("Keep GitLab's version").onClick(() => void this.keepWhole("theirs")),
+      );
+      actions.addButton((button) => button.setButtonText("Decide later").onClick(() => this.close()));
+      return;
     }
+
+    const { chunks } = this.conflict;
+    const left = conflictCount(chunks) - this.choices.filter((choice) => choice !== undefined).length;
+    if (left > 0) {
+      actions.setDesc(left === 1 ? "1 part left to pick" : `${left} parts left to pick`);
+    }
+    if (offersWholeVersion(chunks)) {
+      actions.addButton((button) =>
+        button.setButtonText("Keep a whole version…").onClick((event) => this.wholeVersionMenu(event)),
+      );
+    }
+    actions.addButton((button) => button.setButtonText("Decide later").onClick(() => this.close()));
+    actions.addButton((button) => {
+      button
+        .setButtonText("Save")
+        .setCta()
+        .setDisabled(merged === null)
+        .onClick(() => {
+          if (merged !== null) {
+            void this.finish(() => this.service.saveMerged(this.conflict, merged, this.lockLike));
+          }
+        });
+    });
+  }
+
+  /** Keep one version as it is, saying what of the other side that drops. */
+  private wholeVersionMenu(event: MouseEvent): void {
+    if (this.conflict.kind !== "merge") return;
+    const { chunks } = this.conflict;
+    const menu = new Menu();
+    menu.addItem((item) =>
+      item
+        .setTitle(`This device's version, without ${changes(dropped(chunks, "theirs"))} from GitLab`)
+        .setIcon("monitor-smartphone")
+        .onClick(() => void this.keepWhole("mine")),
+    );
+    menu.addItem((item) =>
+      item
+        .setTitle(`GitLab's version, without ${changes(dropped(chunks, "mine"))} from this device`)
+        .setIcon("cloud")
+        .onClick(() => void this.keepWhole("theirs")),
+    );
+    menu.showAtMouseEvent(event);
+  }
+
+  private async keepWhole(side: Side): Promise<void> {
+    await this.finish(() => this.service.keepSide(this.conflict, side));
   }
 
   private async finish(action: () => Promise<void>): Promise<void> {
@@ -198,16 +230,50 @@ export class ConflictListModal extends Modal {
   }
 }
 
-/** One side of a conflict; `segments` mark the words that differ from the other side. */
+/**
+ * Whether "Keep a whole version" adds anything: with a single part to pick and
+ * nothing combined on its own, picking a side already gives that whole version.
+ */
+export function offersWholeVersion(chunks: MergeChunk[]): boolean {
+  return !(conflictCount(chunks) === 1 && chunks.every((chunk) => chunk.kind !== "auto"));
+}
+
+/** How many changes from `side` keeping the other whole version throws away. */
+export function dropped(chunks: MergeChunk[], side: "mine" | "theirs"): number {
+  return chunks.filter((chunk) => chunk.kind === "conflict" || (chunk.kind === "auto" && chunk.from === side)).length;
+}
+
+function changes(count: number): string {
+  return count === 1 ? "1 change" : `${count} changes`;
+}
+
+/**
+ * One version of a conflicting part, as a button that picks it. `segments`
+ * mark the words that differ from the other version.
+ */
 function renderSide(
   parent: HTMLElement,
   label: string,
   lines: string[],
   chosen: boolean,
-  segments?: DiffSegment[],
+  segments: DiffSegment[] | undefined,
+  onPick: () => void,
 ): void {
   const side = parent.createDiv({ cls: `envoy-conflict-side${chosen ? " is-chosen" : ""}` });
-  side.createDiv({ cls: "envoy-conflict-side-label", text: label });
+  side.setAttribute("role", "button");
+  side.setAttribute("tabindex", "0");
+  side.setAttribute("aria-pressed", String(chosen));
+  side.setAttribute("aria-label", `Use ${label === "GitLab" ? "GitLab's" : "this device's"} version of this part`);
+  side.addEventListener("click", onPick);
+  side.addEventListener("keydown", (event) => {
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      onPick();
+    }
+  });
+  const header = side.createDiv({ cls: "envoy-conflict-side-label" });
+  header.createSpan({ text: label });
+  setIcon(header.createSpan({ cls: "envoy-conflict-side-mark" }), chosen ? "circle-check" : "circle");
   if (lines.length === 0) {
     side.createEl("pre", { text: "(Removed)" });
     return;

@@ -64,6 +64,35 @@
 	border-inline-start: 3px solid var(--interactive-accent);
 }
 
+/* Each version is a button that picks it. */
+.envoy-conflict-side {
+	cursor: var(--cursor);
+	border-radius: var(--radius-s);
+}
+.envoy-conflict-side:hover pre {
+	background-color: var(--background-modifier-hover);
+}
+.envoy-conflict-side:focus-visible {
+	outline: 2px solid var(--interactive-accent);
+	outline-offset: 2px;
+}
+.envoy-conflict-side .envoy-conflict-side-label {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+}
+.envoy-conflict-side-mark {
+	display: inline-flex;
+	color: var(--text-faint);
+}
+.envoy-conflict-side-mark svg {
+	width: var(--icon-s);
+	height: var(--icon-s);
+}
+.envoy-conflict-side.is-chosen .envoy-conflict-side-mark {
+	color: var(--interactive-accent);
+}
+
 /* Words one version has and the other doesn't. */
 .envoy-diff-changed {
 	border-radius: var(--radius-s);

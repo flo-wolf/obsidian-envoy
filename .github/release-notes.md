@@ -1,4 +1,1 @@
-- **Changes highlighted in the conflict window:** for each part changed on both devices, the words that differ between this device's and GitLab's version are marked.
-- **Settings in Obsidian's settings search:** the settings tab uses Obsidian's declarative settings API. The edit debounce and timer interval only show while their option is on, and the conflict strategy now names the versions as the conflict window does.
-- Fixes for the community directory review: no Node modules on mobile, popout-safe timers, an Obsidian dialog instead of the browser's confirm, typed logger, and more.
-- Requires Obsidian 1.13 or newer.
+A clearer conflict window: click the version you want for each part changed on both devices (or **Use both**), then **Save**. A note says how many parts are left. **Keep a whole version…** opens a small menu that keeps this device's or GitLab's version as it is and says how many of the other side's changes that drops; it's only shown when it differs from picking parts.

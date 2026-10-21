@@ -195,9 +195,11 @@ Run **Resolve sync conflicts**, or just sync by hand: a manual sync that finds c
 conflict window right away.
 
 - Parts changed on one side only are already filled in, compared against the last synced version.
-- For each spot changed on both sides, choose **this device's**, **GitLab's**, or **both**. The two
-  versions are shown side by side, or stacked on a phone.
-- Or keep one whole version. Files that aren't text, such as images, only offer that.
+- For each part changed on both sides, click the version to keep, or **Use both**. The two versions
+  are shown side by side, or stacked on a phone, with the words that differ highlighted.
+- **Keep a whole version…** keeps this device's or GitLab's version as it is, and says how many of
+  the other side's changes that drops. It's only offered when it differs from picking parts. Files
+  that aren't text, such as images, only offer whole versions.
 
 Saving writes the result to the note and deletes the copy; the next sync uploads both. **Decide
 later** leaves everything as it is.
