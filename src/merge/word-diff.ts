@@ -48,7 +48,23 @@ export function wordDiff(mine: string, theirs: string): { mine: DiffSegment[]; t
       j += 1;
     }
   }
-  return { mine: left, theirs: right };
+  return { mine: trimChanges(left), theirs: trimChanges(right) };
+}
+
+/** Spaces at the edges of a changed run count as unchanged, so only the words are marked. */
+function trimChanges(segments: DiffSegment[]): DiffSegment[] {
+  const out: DiffSegment[] = [];
+  for (const segment of segments) {
+    if (!segment.changed) {
+      push(out, segment.text, false);
+      continue;
+    }
+    const [, before, core, after] = /^(\s*)([\s\S]*?)(\s*)$/.exec(segment.text) ?? ["", "", segment.text, ""];
+    if (before) push(out, before, false);
+    if (core) push(out, core, true);
+    if (after) push(out, after, false);
+  }
+  return out;
 }
 
 /** Words, runs of whitespace, and single punctuation marks. */

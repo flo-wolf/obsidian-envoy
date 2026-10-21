@@ -18,7 +18,7 @@ describe("wordDiff", () => {
   it("marks words added on one side only", () => {
     const diff = wordDiff("readable only in Obsidian.", "readable only in Obsidian. It's awesome!")!;
     expect(marked(diff.mine)).toEqual([]);
-    expect(marked(diff.theirs).join("")).toBe(" It's awesome!");
+    expect(marked(diff.theirs).join("")).toBe("It's awesome!");
   });
 
   it("keeps every character, so the text reads the same", () => {

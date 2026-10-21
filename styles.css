@@ -4,93 +4,216 @@
 	width: min(960px, 95vw);
 }
 
+.envoy-conflict-intro,
 .envoy-conflict-hint {
 	color: var(--text-muted);
 	font-size: var(--font-ui-small);
 }
 
-.envoy-conflict-chunks {
-	display: flex;
-	flex-direction: column;
-	gap: var(--size-4-2);
+/* The note as it will be saved: one listing with a number gutter, like a diff. */
+.envoy-file {
+	--envoy-gutter: 44px;
+	--envoy-pad: var(--size-4-3);
 	margin-block: var(--size-4-3);
+	overflow: hidden;
+	border: var(--border-width) solid var(--background-modifier-border);
+	border-radius: var(--radius-m);
+	font-size: var(--font-ui-small);
 }
 
-.envoy-chunk pre {
-	margin: 0;
-	padding: var(--size-4-2);
+.envoy-file-head {
+	display: flex;
+	justify-content: space-between;
+	gap: var(--size-4-2);
+	padding: var(--size-4-2) var(--envoy-pad);
+	border-bottom: var(--border-width) solid var(--background-modifier-border);
+	background-color: var(--background-secondary);
+	color: var(--text-muted);
+	font-size: var(--font-ui-smaller);
+}
+
+.envoy-file-name {
+	color: var(--text-normal);
+	font-weight: var(--font-semibold);
+}
+
+.envoy-line {
+	display: grid;
+	grid-template-columns: var(--envoy-gutter) 1fr auto;
+	align-items: baseline;
+	font-family: var(--font-monospace);
+	line-height: 1.7;
+}
+
+.envoy-line-n {
+	padding-right: var(--envoy-pad);
+	color: var(--text-faint);
+	text-align: right;
+	user-select: none;
+}
+
+.envoy-line-text {
 	white-space: pre-wrap;
 	word-break: break-word;
-	font-size: var(--font-ui-small);
-	border-radius: var(--radius-s);
+}
+
+.envoy-line-tag {
+	display: flex;
+	gap: var(--size-2-3);
+	padding: 0 var(--envoy-pad);
+	color: var(--text-muted);
+	font-family: var(--font-interface);
+	font-size: var(--font-ui-smaller);
+	white-space: nowrap;
+}
+
+.envoy-line.is-combined {
+	background-color: rgba(var(--color-green-rgb), 0.08);
+	box-shadow: inset 3px 0 0 var(--color-green);
+}
+
+.envoy-line.is-picked {
+	background-color: hsla(var(--interactive-accent-hsl), 0.14);
+	box-shadow: inset 3px 0 0 var(--interactive-accent);
+}
+
+.envoy-line.is-picked .envoy-line-tag {
+	color: var(--text-accent);
+}
+
+.envoy-line.is-removed .envoy-line-text {
+	color: var(--text-faint);
+	font-family: var(--font-interface);
+	font-style: italic;
+}
+
+.envoy-line-change {
+	color: var(--text-muted);
+	text-decoration: underline;
+	cursor: var(--cursor);
+}
+
+/* Folded unchanged lines: one centered row across the listing. */
+.envoy-fold {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: var(--size-2-3);
+	padding-block: var(--size-2-2);
+	border-block: var(--border-width) solid var(--background-modifier-border);
+	background-color: var(--background-secondary);
+	color: var(--text-muted);
+	font-size: var(--font-ui-smaller);
+	cursor: var(--cursor);
+}
+
+.envoy-fold:hover {
+	color: var(--text-normal);
+	background-color: var(--background-modifier-hover);
+}
+
+.envoy-fold-icon {
+	display: inline-flex;
+}
+
+.envoy-fold-icon svg {
+	width: var(--icon-xs);
+	height: var(--icon-xs);
+}
+
+/* A part changed on both: three cards in a row, each one is the choice. */
+.envoy-clash {
+	display: grid;
+	grid-template-columns: var(--envoy-gutter) 1fr 1fr 10.5em;
+	border-block: var(--border-width) solid var(--background-modifier-border);
 	background-color: var(--background-secondary);
 }
 
-.envoy-chunk-same pre {
-	color: var(--text-muted);
-	background-color: transparent;
+.envoy-clash > .envoy-line-n {
+	padding-top: calc(var(--size-2-3) + 1.7em);
+	font-family: var(--font-monospace);
+	line-height: 1.7;
 }
 
-.envoy-chunk-skipped,
-.envoy-chunk-label,
-.envoy-conflict-side-label {
-	color: var(--text-muted);
-	font-size: var(--font-ui-smaller);
-	padding-block: var(--size-2-1);
-}
-
-.envoy-chunk-auto pre {
-	border-inline-start: 3px solid var(--color-green);
-}
-
-.envoy-chunk-conflict {
-	padding: var(--size-4-2);
-	border: 1px solid var(--background-modifier-border);
-	border-radius: var(--radius-m);
-}
-
-/* This device's and GitLab's version side by side; stacked on phones. */
-.envoy-conflict-sides {
-	display: grid;
-	grid-template-columns: 1fr 1fr;
-	gap: var(--size-4-2);
-}
-
-.is-mobile .envoy-conflict-sides {
-	grid-template-columns: 1fr;
-}
-
-.envoy-conflict-side.is-chosen pre {
-	border-inline-start: 3px solid var(--interactive-accent);
-}
-
-/* Each version is a button that picks it. */
-.envoy-conflict-side {
+.envoy-clash-card {
+	padding: var(--size-2-3) var(--envoy-pad) var(--size-4-2);
+	border-left: var(--border-width) solid var(--background-modifier-border);
 	cursor: var(--cursor);
-	border-radius: var(--radius-s);
 }
-.envoy-conflict-side:hover pre {
+
+/* The first card lines up with the listing's text column. */
+.envoy-clash > .envoy-line-n + .envoy-clash-card {
+	padding-left: 0;
+	border-left: none;
+}
+
+.envoy-clash-card:hover {
 	background-color: var(--background-modifier-hover);
 }
-.envoy-conflict-side:focus-visible {
+
+.envoy-clash-card:focus-visible {
 	outline: 2px solid var(--interactive-accent);
-	outline-offset: 2px;
+	outline-offset: -2px;
 }
-.envoy-conflict-side .envoy-conflict-side-label {
+
+.envoy-clash-head {
 	display: flex;
 	align-items: center;
-	justify-content: space-between;
+	gap: var(--size-2-3);
+	color: var(--text-muted);
+	font-size: var(--font-ui-smaller);
+	font-weight: var(--font-semibold);
+	letter-spacing: 0.04em;
+	line-height: 1.7;
+	text-transform: uppercase;
 }
-.envoy-conflict-side-mark {
-	display: inline-flex;
+
+.envoy-radio {
+	flex: none;
+	width: 12px;
+	height: 12px;
+	border: 1.5px solid var(--text-faint);
+	border-radius: 50%;
+}
+
+.envoy-clash-code {
+	font-family: var(--font-monospace);
+	line-height: 1.7;
+	white-space: pre-wrap;
+	word-break: break-word;
+}
+
+.envoy-clash-code.is-removed,
+.envoy-clash-hint {
 	color: var(--text-faint);
+	font-family: var(--font-interface);
+	font-size: var(--font-ui-smaller);
+	font-style: normal;
 }
-.envoy-conflict-side-mark svg {
-	width: var(--icon-s);
-	height: var(--icon-s);
+
+/* Phones: the two versions stack, and "both" is a slim row below them. */
+.is-phone .envoy-clash {
+	grid-template-columns: var(--envoy-gutter) 1fr;
 }
-.envoy-conflict-side.is-chosen .envoy-conflict-side-mark {
-	color: var(--interactive-accent);
+
+.is-phone .envoy-clash > .envoy-line-n {
+	grid-row: 1 / span 3;
+}
+
+.is-phone .envoy-clash-card {
+	padding-left: 0;
+	border-left: none;
+}
+
+.is-phone .envoy-clash-card + .envoy-clash-card {
+	border-top: var(--border-width) solid var(--background-modifier-border);
+}
+
+.is-phone .envoy-clash-card.is-both {
+	display: flex;
+	align-items: center;
+	gap: var(--size-4-2);
+	padding-block: var(--size-2-3);
 }
 
 /* Words one version has and the other doesn't. */
@@ -100,16 +223,20 @@
 	color: var(--text-normal);
 }
 
-.envoy-conflict-choice,
 .envoy-conflict-actions {
 	border-top: none;
 	flex-wrap: wrap;
 }
 
-.envoy-conflict-choice .setting-item-control,
 .envoy-conflict-actions .setting-item-control {
 	flex-wrap: wrap;
 	justify-content: flex-end;
+}
+
+.is-phone .envoy-conflict-actions .setting-item-control {
+	flex-direction: column-reverse;
+	align-items: stretch;
+	width: 100%;
 }
 
 /* Settings: keep the line breaks of the token permissions list. */

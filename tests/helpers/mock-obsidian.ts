@@ -226,7 +226,7 @@ export class MockElement {
 
   /** Fires the element's listeners, as a click or key press would. */
   dispatch(type: string, event: any = {}): void {
-    for (const listener of this.listeners[type] ?? []) listener({ preventDefault() {}, ...event });
+    for (const listener of this.listeners[type] ?? []) listener({ preventDefault() {}, stopPropagation() {}, ...event });
   }
 
   hide(): void {

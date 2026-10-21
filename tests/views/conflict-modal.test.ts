@@ -45,20 +45,49 @@ describe("ConflictModal", () => {
     const { content } = open(base, mine, theirs);
     const changed = content().findAll("envoy-diff-changed").map((el) => el.textContent);
 
-    expect(changed).toEqual(["file", "editable", "disk", "readable", " It's awesome!"]);
+    expect(changed).toEqual(["file", "editable", "disk", "readable", "It's awesome!"]);
   });
 
-  it("picks a version by clicking it, then lets you save", async () => {
+  it("picks a version by clicking its card, shows the lines it saves, then lets you save", async () => {
     const { content, button, service } = open(base, mine, theirs);
     expect(button("Save").disabled).toBe(true);
 
-    const [, gitlab] = content().findAll("envoy-conflict-side");
+    const [, gitlab] = content().findAll("envoy-clash-card");
     gitlab.dispatch("click");
 
-    expect(content().findAll("envoy-conflict-side")[1].cls).toContain("is-chosen");
+    expect(content().findAll("envoy-clash")).toHaveLength(0);
+    const picked = content().findAll("is-picked");
+    expect(picked.map((line) => line.textContent)).toEqual([
+      "3Lock your private notes with a password. Encrypted on disk, readable only in Obsidian. It's awesome!GitLab'sChange",
+    ]);
     expect(button("Save").disabled).toBe(false);
     button("Save").clickHandler?.();
     await vi.waitFor(() => expect(service.saveMerged).toHaveBeenCalledWith(expect.anything(), theirs, "mine"));
+  });
+
+  it("shows both versions in the order they're saved, and Change brings the choice back", () => {
+    const { content } = open(saturday, saturdayMine, saturdayTheirs);
+    content().findAll("envoy-clash-card")[2].dispatch("click");
+
+    const picked = content().findAll("is-picked").map((line) => line.findAll("envoy-line-text")[0].textContent);
+    expect(picked).toEqual(["- [ ] Call grandma tomorrow at 4 pm", "- [ ] Call grandma at 5 pm"]);
+
+    content().findAll("envoy-line-change")[0].dispatch("click");
+    expect(content().findAll("envoy-clash")).toHaveLength(1);
+  });
+
+  it("folds unchanged stretches and marks lines combined on their own", () => {
+    const { content } = open(saturday, saturdayMine, saturdayTheirs);
+    const folds = () => content().findAll("envoy-fold").map((row) => row.textContent);
+    // A single hidden line is just shown: folding it would save nothing.
+    expect(folds()).toEqual(["2 unchanged lines", "3 unchanged lines"]);
+    expect(content().findAll("is-combined").map((line) => line.textContent)).toEqual([
+      "4- [x] Milkfrom GitLab",
+      "14- [ ] Pizza and a movie with Samfrom this device",
+    ]);
+
+    content().findAll("envoy-fold")[1].dispatch("click");
+    expect(folds()).toEqual(["2 unchanged lines", "Hide 3 unchanged lines"]);
   });
 
   it("offers no whole version when picking the single part already gives one", () => {

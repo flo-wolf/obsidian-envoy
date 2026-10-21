@@ -4,8 +4,8 @@ import { assembleMerge, conflictCount, type ChunkChoice, type MergeChunk } from 
 import { type DiffSegment, wordDiff } from "../merge/word-diff";
 import type { ConflictRecord } from "../sync/types";
 
-/** How many lines of unchanged text to show around the parts that matter. */
-const CONTEXT_LINES = 3;
+/** How many unchanged lines to show next to each change; the rest fold away. */
+const CONTEXT_LINES = 1;
 
 /**
  * The conflict window: shows both versions of a note, fills in what was merged
@@ -14,6 +14,8 @@ const CONTEXT_LINES = 3;
  */
 export class ConflictModal extends Modal {
   private readonly choices: (ChunkChoice | undefined)[] = [];
+  /** Unchanged stretches the user unfolded, by chunk position. */
+  private readonly unfolded = new Set<number>();
   private lockLike: Side = "mine";
   private done = false;
 
@@ -51,11 +53,17 @@ export class ConflictModal extends Modal {
 
     const { chunks, locked, hasBase, sameLock } = this.conflict;
     const open = conflictCount(chunks);
+    const combined = chunks.filter((chunk) => chunk.kind === "auto").length;
+    const what = `a version for ${open === 1 ? "the part" : `each of the ${open} parts`} changed on both.`;
+    const combinedText = `${combined === 1 ? "1 change was" : `${combined} changes were`} combined on their own`;
     contentEl.createEl("p", {
+      cls: "envoy-conflict-intro",
       text:
         open === 0
-          ? "This device and GitLab changed different parts of this note, so they were merged automatically. Check the result and save it."
-          : `This device and GitLab both changed this note. Parts changed on one side only are already filled in. Pick the version to keep for ${open === 1 ? "the part" : `each of the ${open} parts`} changed on both.`,
+          ? "Both devices changed different parts of this note, so they were combined on their own. Check the result and save it."
+          : combined === 0
+            ? `Both devices changed this note. Pick ${what}`
+            : `Both devices changed this note. ${combinedText}; pick ${what}`,
     });
     if (!hasBase) {
       contentEl.createEl("p", {
@@ -70,15 +78,7 @@ export class ConflictModal extends Modal {
       });
     }
 
-    const list = contentEl.createDiv({ cls: "envoy-conflict-chunks" });
-    let conflictIndex = 0;
-    chunks.forEach((chunk, position) => {
-      if (chunk.kind === "conflict") {
-        this.renderConflict(list, chunk, conflictIndex++);
-      } else {
-        renderSettled(list, chunk, position === 0, position === chunks.length - 1);
-      }
-    });
+    this.renderFile(contentEl, chunks);
 
     if (locked && !sameLock) {
       new Setting(contentEl)
@@ -98,25 +98,115 @@ export class ConflictModal extends Modal {
     this.renderActions(assembleMerge(chunks, this.choices));
   }
 
-  /** Both versions of one part; clicking a version picks it, "Use both" keeps this device's then GitLab's. */
-  private renderConflict(parent: HTMLElement, chunk: Extract<MergeChunk, { kind: "conflict" }>, index: number): void {
+  /**
+   * The note as it will be saved, line by line: unchanged stretches fold
+   * away, lines combined on their own are marked, and each part changed on
+   * both is a choice until it's picked.
+   */
+  private renderFile(parent: HTMLElement, chunks: MergeChunk[]): void {
+    const open = conflictCount(chunks);
+    const left = open - this.choices.filter((choice) => choice !== undefined).length;
+    const combined = chunks.filter((chunk) => chunk.kind === "auto").length;
+    const file = parent.createDiv({ cls: "envoy-file" });
+    const head = file.createDiv({ cls: "envoy-file-head" });
+    const title = head.createSpan();
+    title.createSpan({ cls: "envoy-file-name", text: fileName(this.conflict.record) });
+    title.createSpan({ cls: "envoy-file-sub", text: " · as it will be saved" });
+    const counts = [
+      combined > 0 ? `${combined} combined` : "",
+      open > 0 ? (left > 0 ? `${left} to pick` : "all picked") : "",
+    ].filter(Boolean);
+    head.createSpan({ cls: "envoy-file-counts", text: counts.join(" · ") });
+
+    let number = 1;
+    let conflictIndex = 0;
+    chunks.forEach((chunk, position) => {
+      const last = position === chunks.length - 1;
+      if (chunk.kind === "same") {
+        // The empty "line" after the note's final line break isn't worth a row.
+        const lines = last && chunk.lines[chunk.lines.length - 1] === "" ? chunk.lines.slice(0, -1) : chunk.lines;
+        number = this.renderUnchanged(file, lines, position, number, position === 0, last);
+      } else if (chunk.kind === "auto") {
+        const tag = chunk.from === "mine" ? "from this device" : chunk.from === "theirs" ? "from GitLab" : "same on both";
+        if (chunk.lines.length === 0) {
+          lineRow(file, null, "Removed", { cls: "is-combined is-removed", tag });
+        }
+        chunk.lines.forEach((text, i) => {
+          lineRow(file, number++, text, { cls: "is-combined", tag: i === 0 ? tag : undefined });
+        });
+      } else {
+        number = this.renderClash(file, chunk, conflictIndex++, number);
+      }
+    });
+  }
+
+  /** Unchanged lines, with only a little context next to the changes unless unfolded. */
+  private renderUnchanged(file: HTMLElement, lines: string[], position: number, number: number, first: boolean, last: boolean): number {
+    const head = first ? 0 : CONTEXT_LINES;
+    const tail = last ? 0 : CONTEXT_LINES;
+    const hidden = lines.length - head - tail;
+    if (hidden < 2) {
+      lines.forEach((text, i) => lineRow(file, number + i, text));
+      return number + lines.length;
+    }
+    if (this.unfolded.has(position)) {
+      foldRow(file, `Hide ${hidden} unchanged lines`, "chevrons-down-up", () => this.toggleFold(position));
+      lines.forEach((text, i) => lineRow(file, number + i, text));
+      return number + lines.length;
+    }
+    lines.slice(0, head).forEach((text, i) => lineRow(file, number + i, text));
+    foldRow(file, `${hidden} unchanged ${hidden === 1 ? "line" : "lines"}`, "chevrons-up-down", () => this.toggleFold(position));
+    lines.slice(lines.length - tail).forEach((text, i) => lineRow(file, number + head + hidden + i, text));
+    return number + lines.length;
+  }
+
+  private toggleFold(position: number): void {
+    if (this.unfolded.has(position)) {
+      this.unfolded.delete(position);
+    } else {
+      this.unfolded.add(position);
+    }
+    this.render();
+  }
+
+  /**
+   * A part changed on both: this device's version, GitLab's and "both", each
+   * a card that picks it. Once picked, the part shows as the lines it saves.
+   */
+  private renderClash(file: HTMLElement, chunk: Extract<MergeChunk, { kind: "conflict" }>, index: number, number: number): number {
     const choice = this.choices[index];
-    const pick = (value: ChunkChoice) => {
+    const pick = (value: ChunkChoice | undefined) => {
       this.choices[index] = value;
       this.render();
     };
-    const box = parent.createDiv({ cls: "envoy-chunk envoy-chunk-conflict" });
-    const sides = box.createDiv({ cls: "envoy-conflict-sides" });
-    const diff = wordDiff(chunk.mine.join("\n"), chunk.theirs.join("\n"));
-    renderSide(sides, "This device", chunk.mine, choice === "mine" || choice === "both", diff?.mine, () => pick("mine"));
-    renderSide(sides, "GitLab", chunk.theirs, choice === "theirs" || choice === "both", diff?.theirs, () => pick("theirs"));
 
-    new Setting(box).setClass("envoy-conflict-choice").addButton((button) => {
-      button.setButtonText("Use both").onClick(() => pick("both"));
-      if (choice === "both") {
-        button.setCta();
+    if (choice) {
+      const parts: [string[], string][] =
+        choice === "both" ? [[chunk.mine, "this device's"], [chunk.theirs, "GitLab's"]]
+        : choice === "mine" ? [[chunk.mine, "this device's"]]
+        : [[chunk.theirs, "GitLab's"]];
+      let first = true;
+      for (const [lines, label] of parts) {
+        const change = first ? () => pick(undefined) : undefined;
+        if (lines.length === 0) {
+          lineRow(file, null, "Removed", { cls: "is-picked is-removed", tag: label, change });
+        }
+        lines.forEach((text, i) => {
+          lineRow(file, number++, text, { cls: "is-picked", tag: i === 0 ? label : undefined, change: i === 0 ? change : undefined });
+        });
+        first = false;
       }
-    });
+      return number;
+    }
+
+    const clash = file.createDiv({ cls: "envoy-clash" });
+    clash.createSpan({ cls: "envoy-line-n", text: String(number) });
+    const diff = wordDiff(chunk.mine.join("\n"), chunk.theirs.join("\n"));
+    codeBlock(clashCard(clash, "This device", () => pick("mine")), chunk.mine, diff?.mine);
+    codeBlock(clashCard(clash, "GitLab", () => pick("theirs")), chunk.theirs, diff?.theirs);
+    clashCard(clash, "Both", () => pick("both"), "is-both").createDiv({ cls: "envoy-clash-hint", text: "this device's first" });
+    // Until it's picked, the lines below are numbered as if this device's version stays.
+    return number + chunk.mine.length;
   }
 
   private renderActions(merged: string | null): void {
@@ -247,78 +337,84 @@ function changes(count: number): string {
   return count === 1 ? "1 change" : `${count} changes`;
 }
 
-/**
- * One version of a conflicting part, as a button that picks it. `segments`
- * mark the words that differ from the other version.
- */
-function renderSide(
-  parent: HTMLElement,
-  label: string,
-  lines: string[],
-  chosen: boolean,
-  segments: DiffSegment[] | undefined,
-  onPick: () => void,
+/** One line of the note: number, text, and an optional tag on the right ("from GitLab", "GitLab's · Change"). */
+function lineRow(
+  file: HTMLElement,
+  number: number | null,
+  text: string,
+  options: { cls?: string; tag?: string; change?: () => void } = {},
 ): void {
-  const side = parent.createDiv({ cls: `envoy-conflict-side${chosen ? " is-chosen" : ""}` });
-  side.setAttribute("role", "button");
-  side.setAttribute("tabindex", "0");
-  side.setAttribute("aria-pressed", String(chosen));
-  side.setAttribute("aria-label", `Use ${label === "GitLab" ? "GitLab's" : "this device's"} version of this part`);
-  side.addEventListener("click", onPick);
-  side.addEventListener("keydown", (event) => {
-    if (event.key === "Enter" || event.key === " ") {
-      event.preventDefault();
-      onPick();
-    }
-  });
-  const header = side.createDiv({ cls: "envoy-conflict-side-label" });
-  header.createSpan({ text: label });
-  setIcon(header.createSpan({ cls: "envoy-conflict-side-mark" }), chosen ? "circle-check" : "circle");
+  const row = file.createDiv({ cls: `envoy-line${options.cls ? ` ${options.cls}` : ""}` });
+  row.createSpan({ cls: "envoy-line-n", text: number === null ? "" : String(number) });
+  row.createSpan({ cls: "envoy-line-text", text });
+  const tag = row.createSpan({ cls: "envoy-line-tag" });
+  if (options.tag) tag.createSpan({ text: options.tag });
+  if (options.change) {
+    const change = tag.createEl("a", { cls: "envoy-line-change", text: "Change" });
+    change.setAttribute("role", "button");
+    change.setAttribute("tabindex", "0");
+    activate(change, options.change);
+  }
+}
+
+/** A row standing in for folded unchanged lines, or folding them back. */
+function foldRow(file: HTMLElement, text: string, icon: string, onClick: () => void): void {
+  const row = file.createDiv({ cls: "envoy-fold" });
+  row.setAttribute("role", "button");
+  row.setAttribute("tabindex", "0");
+  setIcon(row.createSpan({ cls: "envoy-fold-icon" }), icon);
+  row.createSpan({ text });
+  activate(row, onClick);
+}
+
+/** A card in a part changed on both: its header with a radio, and whatever goes below. */
+function clashCard(clash: HTMLElement, label: string, onPick: () => void, cls = ""): HTMLElement {
+  const card = clash.createDiv({ cls: `envoy-clash-card${cls ? ` ${cls}` : ""}` });
+  card.setAttribute("role", "button");
+  card.setAttribute("tabindex", "0");
+  card.setAttribute("aria-label", label === "Both" ? "Keep both versions, this device's first" : `Keep ${label === "GitLab" ? "GitLab's" : "this device's"} version`);
+  activate(card, onPick);
+  const head = card.createDiv({ cls: "envoy-clash-head" });
+  head.createSpan({ cls: "envoy-radio" });
+  head.createSpan({ text: label });
+  return card;
+}
+
+/** One version's lines; `segments` mark the words that differ from the other version. */
+function codeBlock(card: HTMLElement, lines: string[], segments: DiffSegment[] | undefined): void {
+  const code = card.createDiv({ cls: "envoy-clash-code" });
   if (lines.length === 0) {
-    side.createEl("pre", { text: "(Removed)" });
-    return;
-  }
-  const pre = side.createEl("pre");
-  if (!segments) {
-    pre.setText(lines.join("\n"));
-    return;
-  }
-  for (const segment of segments) {
-    if (segment.changed) {
-      pre.createSpan({ cls: "envoy-diff-changed", text: segment.text });
-    } else {
-      pre.appendText(segment.text);
+    code.addClass("is-removed");
+    code.setText("Removed");
+  } else if (!segments) {
+    code.setText(lines.join("\n"));
+  } else {
+    for (const segment of segments) {
+      if (segment.changed) {
+        code.createSpan({ cls: "envoy-diff-changed", text: segment.text });
+      } else {
+        code.appendText(segment.text);
+      }
     }
   }
 }
 
-/** Unchanged or automatically merged text; long unchanged stretches are shortened. */
-function renderSettled(parent: HTMLElement, chunk: Exclude<MergeChunk, { kind: "conflict" }>, first: boolean, last: boolean): void {
-  if (chunk.kind === "auto") {
-    const box = parent.createDiv({ cls: "envoy-chunk envoy-chunk-auto" });
-    box.createDiv({
-      cls: "envoy-chunk-label",
-      text: chunk.from === "mine" ? "Changed on this device" : chunk.from === "theirs" ? "Changed on GitLab" : "Changed the same way on both",
-    });
-    box.createEl("pre", { text: chunk.lines.length > 0 ? chunk.lines.join("\n") : "(Removed)" });
-    return;
-  }
-  const box = parent.createDiv({ cls: "envoy-chunk envoy-chunk-same" });
-  const { lines } = chunk;
-  const keep = CONTEXT_LINES;
-  if (lines.length <= keep * 2 + 1) {
-    box.createEl("pre", { text: lines.join("\n") });
-    return;
-  }
-  // Show a little context next to the changes; at the start or end of the note, only on the inner side.
-  const head = first ? [] : lines.slice(0, keep);
-  const tail = last ? [] : lines.slice(-keep);
-  if (head.length > 0) box.createEl("pre", { text: head.join("\n") });
-  box.createDiv({
-    cls: "envoy-chunk-skipped",
-    text: `${lines.length - head.length - tail.length} unchanged lines`,
+/** Click, Enter and Space all run `action`. */
+function activate(el: HTMLElement, action: () => void): void {
+  el.addEventListener("click", (event) => {
+    event.stopPropagation();
+    action();
   });
-  if (tail.length > 0) box.createEl("pre", { text: tail.join("\n") });
+  el.addEventListener("keydown", (event) => {
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      action();
+    }
+  });
+}
+
+function fileName(record: ConflictRecord): string {
+  return record.path.split("/").pop() ?? record.path;
 }
 
 function noteName(record: ConflictRecord): string {
