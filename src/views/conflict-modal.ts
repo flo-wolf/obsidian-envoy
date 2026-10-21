@@ -16,6 +16,8 @@ export class ConflictModal extends Modal {
   private readonly choices: (ChunkChoice | undefined)[] = [];
   /** Unchanged stretches the user unfolded, by chunk position. */
   private readonly unfolded = new Set<number>();
+  /** The scrolling note listing, kept so a redraw after a pick stays where the user was. */
+  private fileEl: HTMLElement | null = null;
   private lockLike: Side = "mine";
   private done = false;
 
@@ -107,7 +109,9 @@ export class ConflictModal extends Modal {
     const open = conflictCount(chunks);
     const left = open - this.choices.filter((choice) => choice !== undefined).length;
     const combined = chunks.filter((chunk) => chunk.kind === "auto").length;
+    const scrolledTo = this.fileEl?.scrollTop ?? 0;
     const file = parent.createDiv({ cls: "envoy-file" });
+    this.fileEl = file;
     const head = file.createDiv({ cls: "envoy-file-head" });
     const title = head.createSpan();
     title.createSpan({ cls: "envoy-file-name", text: fileName(this.conflict.record) });
@@ -138,6 +142,7 @@ export class ConflictModal extends Modal {
         number = this.renderClash(file, chunk, conflictIndex++, number);
       }
     });
+    file.scrollTop = scrolledTo;
   }
 
   /** Unchanged lines, with only a little context next to the changes unless unfolded. */
@@ -150,22 +155,17 @@ export class ConflictModal extends Modal {
       return number + lines.length;
     }
     if (this.unfolded.has(position)) {
-      foldRow(file, `Hide ${hidden} unchanged lines`, "chevrons-down-up", () => this.toggleFold(position));
       lines.forEach((text, i) => lineRow(file, number + i, text));
       return number + lines.length;
     }
     lines.slice(0, head).forEach((text, i) => lineRow(file, number + i, text));
-    foldRow(file, `${hidden} unchanged ${hidden === 1 ? "line" : "lines"}`, "chevrons-up-down", () => this.toggleFold(position));
+    foldRow(file, `${hidden} unchanged ${hidden === 1 ? "line" : "lines"}`, () => this.unfold(position));
     lines.slice(lines.length - tail).forEach((text, i) => lineRow(file, number + head + hidden + i, text));
     return number + lines.length;
   }
 
-  private toggleFold(position: number): void {
-    if (this.unfolded.has(position)) {
-      this.unfolded.delete(position);
-    } else {
-      this.unfolded.add(position);
-    }
+  private unfold(position: number): void {
+    this.unfolded.add(position);
     this.render();
   }
 
@@ -200,8 +200,12 @@ export class ConflictModal extends Modal {
     }
 
     const clash = file.createDiv({ cls: "envoy-clash" });
-    clash.createSpan({ cls: "envoy-line-n", text: String(number) });
-    const diff = wordDiff(chunk.mine.join("\n"), chunk.theirs.join("\n"));
+    // The number this device's first line would get; none if this device removed the part.
+    clash.createSpan({ cls: "envoy-line-n", text: chunk.mine.length > 0 ? String(number) : "" });
+    // When one side removed the part there's nothing to compare word by word.
+    const diff = chunk.mine.length > 0 && chunk.theirs.length > 0
+      ? wordDiff(chunk.mine.join("\n"), chunk.theirs.join("\n"))
+      : null;
     codeBlock(clashCard(clash, "This device", () => pick("mine")), chunk.mine, diff?.mine);
     codeBlock(clashCard(clash, "GitLab", () => pick("theirs")), chunk.theirs, diff?.theirs);
     clashCard(clash, "Both", () => pick("both"), "is-both").createDiv({ cls: "envoy-clash-hint", text: "this device's first" });
@@ -357,12 +361,12 @@ function lineRow(
   }
 }
 
-/** A row standing in for folded unchanged lines, or folding them back. */
-function foldRow(file: HTMLElement, text: string, icon: string, onClick: () => void): void {
+/** A row standing in for folded unchanged lines; clicking it shows them. */
+function foldRow(file: HTMLElement, text: string, onClick: () => void): void {
   const row = file.createDiv({ cls: "envoy-fold" });
   row.setAttribute("role", "button");
   row.setAttribute("tabindex", "0");
-  setIcon(row.createSpan({ cls: "envoy-fold-icon" }), icon);
+  setIcon(row.createSpan({ cls: "envoy-fold-icon" }), "chevrons-up-down");
   row.createSpan({ text });
   activate(row, onClick);
 }

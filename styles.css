@@ -15,13 +15,17 @@
 	--envoy-gutter: 44px;
 	--envoy-pad: var(--size-4-3);
 	margin-block: var(--size-4-3);
-	overflow: hidden;
+	max-height: min(60vh, 640px);
+	overflow-y: auto;
 	border: var(--border-width) solid var(--background-modifier-border);
 	border-radius: var(--radius-m);
 	font-size: var(--font-ui-small);
 }
 
 .envoy-file-head {
+	position: sticky;
+	top: 0;
+	z-index: 1;
 	display: flex;
 	justify-content: space-between;
 	gap: var(--size-4-2);
@@ -124,12 +128,13 @@
 /* A part changed on both: three cards in a row, each one is the choice. */
 .envoy-clash {
 	display: grid;
-	grid-template-columns: var(--envoy-gutter) 1fr 1fr 10.5em;
+	grid-template-columns: calc(var(--envoy-gutter) - var(--envoy-pad)) 1fr 1fr 10.5em;
 	border-block: var(--border-width) solid var(--background-modifier-border);
 	background-color: var(--background-secondary);
 }
 
 .envoy-clash > .envoy-line-n {
+	padding-right: 0;
 	padding-top: calc(var(--size-2-3) + 1.7em);
 	font-family: var(--font-monospace);
 	line-height: 1.7;
@@ -141,9 +146,7 @@
 	cursor: var(--cursor);
 }
 
-/* The first card lines up with the listing's text column. */
 .envoy-clash > .envoy-line-n + .envoy-clash-card {
-	padding-left: 0;
 	border-left: none;
 }
 
@@ -193,7 +196,7 @@
 
 /* Phones: the two versions stack, and "both" is a slim row below them. */
 .is-phone .envoy-clash {
-	grid-template-columns: var(--envoy-gutter) 1fr;
+	grid-template-columns: calc(var(--envoy-gutter) - var(--envoy-pad)) 1fr;
 }
 
 .is-phone .envoy-clash > .envoy-line-n {
@@ -201,7 +204,6 @@
 }
 
 .is-phone .envoy-clash-card {
-	padding-left: 0;
 	border-left: none;
 }
 
@@ -231,6 +233,10 @@
 .envoy-conflict-actions .setting-item-control {
 	flex-wrap: wrap;
 	justify-content: flex-end;
+}
+
+.is-phone .envoy-file {
+	max-height: 55vh;
 }
 
 .is-phone .envoy-conflict-actions .setting-item-control {

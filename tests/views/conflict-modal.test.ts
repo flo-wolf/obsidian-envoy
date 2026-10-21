@@ -87,7 +87,28 @@ describe("ConflictModal", () => {
     ]);
 
     content().findAll("envoy-fold")[1].dispatch("click");
-    expect(folds()).toEqual(["2 unchanged lines", "Hide 3 unchanged lines"]);
+    // Unfolded lines just join the note, with no row to fold them back.
+    expect(folds()).toEqual(["2 unchanged lines"]);
+    const numbers = content().findAll("envoy-line").map((line) => line.findAll("envoy-line-n")[0].textContent);
+    expect(numbers.slice(0, 7)).toEqual(["3", "4", "5", "6", "7", "8", "9"]);
+  });
+
+  it("stays scrolled where it was after a pick", () => {
+    const { content } = open(saturday, saturdayMine, saturdayTheirs);
+    (content().findAll("envoy-file")[0] as unknown as { scrollTop: number }).scrollTop = 120;
+
+    content().findAll("envoy-clash-card")[1].dispatch("click");
+
+    expect((content().findAll("envoy-file")[0] as unknown as { scrollTop: number }).scrollTop).toBe(120);
+  });
+
+  it("doesn't highlight words when one side removed the part", () => {
+    const removedHere = saturdayMine.replace("- [ ] Call grandma tomorrow at 4 pm\n", "");
+    const { content } = open(saturday, removedHere, saturdayTheirs);
+    expect(content().findAll("envoy-diff-changed")).toHaveLength(0);
+    const clash = content().findAll("envoy-clash")[0];
+    expect(clash.findAll("envoy-line-n")[0].textContent).toBe("");
+    expect(clash.findAll("envoy-clash-code")[0].textContent).toBe("Removed");
   });
 
   it("offers no whole version when picking the single part already gives one", () => {
